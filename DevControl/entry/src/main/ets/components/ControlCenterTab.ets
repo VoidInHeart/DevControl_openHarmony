@@ -1,13 +1,17 @@
-import { DeviceInfo, DeviceType } from '../model/DeviceModel';
+import { DeviceInfo, DeviceType, SceneRule } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { Constants } from '../common/Constants';
 
 @Component
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
+  @State endpoint: string = Constants.DEFAULT_GATEWAY_ENDPOINT;
+  @State pairingCode: string = '';
 
   build() {
     Scroll() {
       Column() {
+        this.ConnectionSection()
         this.StatsSection()
         this.SceneSection()
         this.DeviceListSection()
@@ -18,6 +22,73 @@ export struct ControlCenterTab {
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Auto)
+  }
+
+  @Builder
+  ConnectionSection() {
+    Column() {
+      Row() {
+        Column() {
+          Text('网关连接')
+            .fontSize(18)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+          Text(this.deviceManager.connectionMessage)
+            .fontSize(12)
+            .fontColor(this.deviceManager.isOnline() ? $r('app.color.status_online') : $r('app.color.text_secondary'))
+            .margin({ top: 3 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text(this.deviceManager.connectionState)
+          .fontSize(12)
+          .fontColor(this.deviceManager.isOnline() ? $r('app.color.status_online') : $r('app.color.status_warning'))
+      }
+      .width('100%')
+
+      if (!this.deviceManager.isOnline()) {
+        TextInput({ text: this.endpoint, placeholder: 'https://网关地址:8443' })
+          .width('100%')
+          .margin({ top: 12 })
+          .onChange((value: string) => {
+            this.endpoint = value;
+          })
+        Row() {
+          TextInput({ text: this.pairingCode, placeholder: '6 位配对码' })
+            .type(InputType.Number)
+            .maxLength(6)
+            .layoutWeight(1)
+            .onChange((value: string) => {
+              this.pairingCode = value;
+            })
+          Button('配对并连接')
+            .fontSize(14)
+            .fontColor(Color.White)
+            .backgroundColor($r('app.color.primary'))
+            .margin({ left: 8 })
+            .enabled(this.deviceManager.connectionState !== 'connecting' &&
+              this.deviceManager.connectionState !== 'authenticating')
+            .onClick(() => {
+              this.deviceManager.pairAndConnect(this.endpoint, this.pairingCode);
+            })
+        }
+        .width('100%')
+        .margin({ top: 8 })
+      }
+
+      if (this.deviceManager.usingCachedSnapshot) {
+        Text('当前显示离线快照，控制操作已禁用')
+          .fontSize(12)
+          .fontColor($r('app.color.status_warning'))
+          .margin({ top: 8 })
+          .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(12)
+    .backgroundColor($r('app.color.card_background'))
+    .margin({ bottom: 16 })
   }
 
   @Builder
@@ -88,17 +159,19 @@ export struct ControlCenterTab {
         .margin({ bottom: 12 })
 
       Row() {
-        ForEach(this.deviceManager.scenes, (scene: Record<string, string>) => {
-          Button(scene['name'])
+        ForEach(this.deviceManager.scenes, (scene: SceneRule) => {
+          Button(scene.name)
             .fontSize(14)
             .fontColor(Color.White)
             .backgroundColor($r('app.color.primary'))
             .borderRadius(20)
             .padding({ left: 20, right: 20, top: 8, bottom: 8 })
+            .enabled(this.deviceManager.isOnline())
+            .opacity(this.deviceManager.isOnline() ? 1 : 0.45)
             .onClick(() => {
-              this.deviceManager.executeScene(scene['id']);
+              this.deviceManager.executeScene(scene.id);
             })
-        }, (scene: Record<string, string>) => scene['id'])
+        }, (scene: SceneRule) => scene.id)
       }
       .width('100%')
       .justifyContent(FlexAlign.SpaceAround)
@@ -120,6 +193,15 @@ export struct ControlCenterTab {
         .width('100%')
         .margin({ bottom: 12 })
 
+      if (this.deviceManager.devices.length === 0) {
+        Text('连接并配对网关后加载设备快照')
+          .fontSize(14)
+          .fontColor($r('app.color.text_secondary'))
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding(20)
+      }
+
       ForEach(this.deviceManager.devices, (device: DeviceInfo) => {
         Row() {
           Text(this.getDeviceIcon(device))
@@ -139,6 +221,12 @@ export struct ControlCenterTab {
           Text(this.getDeviceStatusText(device))
             .fontSize(13)
             .fontColor($r('app.color.text_secondary'))
+          if (device.pendingAction.length > 0) {
+            Text('处理中')
+              .fontSize(11)
+              .fontColor($r('app.color.primary'))
+              .margin({ left: 8 })
+          }
         }
         .width('100%')
         .padding(12)

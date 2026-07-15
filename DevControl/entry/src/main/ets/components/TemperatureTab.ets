@@ -1,6 +1,5 @@
 import { DeviceInfo, DeviceType, ACMode } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
-import { BrandAdapter, createBrandAdapter } from '../model/BrandAdapter';
 import { Constants } from '../common/Constants';
 
 @Component
@@ -122,6 +121,7 @@ export struct TemperatureTab {
         .layoutWeight(1)
         .margin({ left: 12 })
         Toggle({ type: ToggleType.Switch, isOn: ac.state.acPower })
+          .enabled(this.deviceManager.isOnline() && ac.pendingAction.length === 0)
           .onChange((isOn: boolean) => {
             if (isOn) {
               this.deviceManager.sendCommand(ac.id, 'acPowerOn', '');
@@ -160,35 +160,7 @@ export struct TemperatureTab {
             .trackColor($r('app.color.divider'))
             .selectedColor($r('app.color.temp_cool'))
             .onChange((value: number) => {
-              const adapter: BrandAdapter = createBrandAdapter(ac.brand);
               this.deviceManager.sendCommand(ac.id, 'setTargetTemp', value.toFixed(0));
-            })
-
-          Row() {
-            Text('Target Humidity')
-              .fontSize(14)
-              .fontColor($r('app.color.text_secondary'))
-            Text(ac.state.targetHumidity.toFixed(0) + '%')
-              .fontSize(20)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.primary'))
-          }
-          .width('100%')
-          .justifyContent(FlexAlign.SpaceBetween)
-          .margin({ top: 12 })
-
-          Slider({
-            value: ac.state.targetHumidity,
-            min: Constants.HUMIDITY_MIN,
-            max: Constants.HUMIDITY_MAX,
-            step: 5,
-            style: SliderStyle.OutSet
-          })
-            .width('100%')
-            .trackColor($r('app.color.divider'))
-            .selectedColor($r('app.color.primary'))
-            .onChange((value: number) => {
-              this.deviceManager.sendCommand(ac.id, 'setTargetHumidity', value.toFixed(0));
             })
 
           Row() {
@@ -204,6 +176,7 @@ export struct TemperatureTab {
             this.ModeButton('Heat', 1, ac.state.acMode === ACMode.HEAT)
             this.ModeButton('Fan', 2, ac.state.acMode === ACMode.FAN)
             this.ModeButton('Auto', 3, ac.state.acMode === ACMode.AUTO)
+            this.ModeButton('Dry', 4, ac.state.acMode === ACMode.DRY)
           }
           .width('100%')
           .justifyContent(FlexAlign.SpaceAround)
@@ -227,6 +200,7 @@ export struct TemperatureTab {
       .backgroundColor(isActive ? $r('app.color.primary') : $r('app.color.card_background'))
       .borderRadius(16)
       .padding({ left: 16, right: 16, top: 6, bottom: 6 })
+      .enabled(this.deviceManager.isOnline())
       .onClick(() => {
         if (this.acDevices.length > 0) {
           const ac = this.acDevices[this.selectedACIndex];

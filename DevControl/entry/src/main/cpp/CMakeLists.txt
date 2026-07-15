@@ -12,10 +12,7 @@ include_directories(${NATIVERENDER_ROOT_PATH}
 
 add_library(entry SHARED
     napi_init.cpp
-    src/device_simulator.cpp
-    src/crypto_engine.cpp
-    src/protocol_parser.cpp
-    src/tls_client.cpp
+    src/protocol_core.cpp
 )
 
-target_link_libraries(entry PUBLIC libace_napi.z.so)
+target_link_libraries(entry PUBLIC libace_napi.z.so libohcrypto.so)

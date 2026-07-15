@@ -17,7 +17,7 @@ struct Index {
   }
 
   aboutToDisappear(): void {
-    this.deviceManager.stopTick();
+    this.deviceManager.close();
   }
 
   build() {

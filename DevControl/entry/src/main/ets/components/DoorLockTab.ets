@@ -71,7 +71,8 @@ export struct DoorLockTab {
           .borderRadius(20)
           .padding({ left: 32, right: 32, top: 8, bottom: 8 })
           .enabled(!device.state.isLocked)
-          .opacity(device.state.isLocked ? 0.4 : 1)
+          .enabled(this.deviceManager.isOnline() && !device.state.isLocked && device.pendingAction.length === 0)
+          .opacity(this.deviceManager.isOnline() && !device.state.isLocked ? 1 : 0.4)
           .onClick(() => {
             this.deviceManager.sendCommand(device.id, 'lock', '');
           })
@@ -83,9 +84,22 @@ export struct DoorLockTab {
           .borderRadius(20)
           .padding({ left: 32, right: 32, top: 8, bottom: 8 })
           .enabled(device.state.isLocked)
-          .opacity(device.state.isLocked ? 1 : 0.4)
+          .enabled(this.deviceManager.isOnline() && device.state.isLocked && device.pendingAction.length === 0)
+          .opacity(this.deviceManager.isOnline() && device.state.isLocked ? 1 : 0.4)
           .onClick(() => {
-            this.deviceManager.sendCommand(device.id, 'unlock', '');
+            this.getUIContext().getPromptAction().showDialog({
+              title: '确认解锁 ' + device.name,
+              message: '远程解锁属于高风险操作，请确认门外环境安全。',
+              buttons: [
+                { text: '取消', color: '#666666' },
+                { text: '确认解锁', color: '#D9485F' }
+              ]
+            }).then((result) => {
+              if (result.index === 1) {
+                this.deviceManager.sendCommand(device.id, 'unlock', '');
+              }
+            }).catch(() => {
+            });
           })
       }
       .margin({ top: 16, bottom: 16 })
@@ -169,16 +183,6 @@ export struct DoorLockTab {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
         Blank()
-        if (this.deviceManager.accessLogs.length > 0) {
-          Button('Clear')
-            .fontSize(12)
-            .fontColor($r('app.color.primary'))
-            .backgroundColor(Color.Transparent)
-            .padding(0)
-            .onClick(() => {
-              this.deviceManager.clearAccessLogs();
-            })
-        }
       }
       .width('100%')
 
@@ -203,6 +207,12 @@ export struct DoorLockTab {
                 .fontSize(12)
                 .fontColor($r('app.color.text_secondary'))
                 .margin({ top: 2 })
+              if (log.reason.length > 0) {
+                Text(log.reason)
+                  .fontSize(11)
+                  .fontColor($r('app.color.status_alert'))
+                  .margin({ top: 2 })
+              }
             }
             .alignItems(HorizontalAlign.Start)
             .layoutWeight(1)

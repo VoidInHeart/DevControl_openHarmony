@@ -1,11 +1,13 @@
 import { DeviceInfo, DeviceType } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { Constants } from '../common/Constants';
 
 @Component
 export struct LightingTab {
   @Consume deviceManager: DeviceManager;
   @State autoModeEnabled: boolean = false;
-  @State sensitivity: number = 50;
+  @State illuminanceThreshold: number = 100;
+  @State noPresenceDelay: number = 60;
 
   build() {
     Scroll() {
@@ -52,6 +54,7 @@ export struct LightingTab {
         .layoutWeight(1)
         .margin({ left: 12 })
         Toggle({ type: ToggleType.Switch, isOn: device.state.isOn })
+          .enabled(this.deviceManager.isOnline() && device.pendingAction.length === 0)
           .onChange((isOn: boolean) => {
             if (isOn) {
               this.deviceManager.sendCommand(device.id, 'turnOn', '100');
@@ -74,7 +77,7 @@ export struct LightingTab {
             value: device.state.brightness,
             min: 0,
             max: 100,
-            step: 5,
+            step: 1,
             style: SliderStyle.OutSet
           })
             .layoutWeight(1)
@@ -118,11 +121,10 @@ export struct LightingTab {
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.autoModeEnabled })
+          .enabled(this.deviceManager.isOnline())
           .onChange((isOn: boolean) => {
             this.autoModeEnabled = isOn;
-            if (isOn) {
-              this.deviceManager.addAlert('system', 'info', 'Auto mode enabled');
-            }
+            this.deviceManager.configureLightingAutomation(isOn, this.illuminanceThreshold, this.noPresenceDelay);
           })
           .selectedColor($r('app.color.status_online'))
       }
@@ -131,14 +133,14 @@ export struct LightingTab {
 
       if (this.autoModeEnabled) {
         Row() {
-          Text('Sensitivity')
+          Text('Illuminance')
             .fontSize(14)
             .fontColor($r('app.color.text_secondary'))
             .width(90)
           Slider({
-            value: this.sensitivity,
-            min: 0,
-            max: 100,
+            value: this.illuminanceThreshold,
+            min: Constants.ILLUMINANCE_THRESHOLD_MIN,
+            max: Constants.ILLUMINANCE_THRESHOLD_MAX,
             step: 10,
             style: SliderStyle.OutSet
           })
@@ -146,12 +148,42 @@ export struct LightingTab {
             .trackColor($r('app.color.divider'))
             .selectedColor($r('app.color.accent'))
             .onChange((value: number) => {
-              this.sensitivity = value;
+              this.illuminanceThreshold = value;
+              this.deviceManager.configureLightingAutomation(true, value, this.noPresenceDelay);
             })
-          Text(this.sensitivity.toFixed(0) + '%')
+          Text(this.illuminanceThreshold.toFixed(0) + ' lx')
             .fontSize(14)
             .fontColor($r('app.color.text_primary'))
-            .width(44)
+            .width(60)
+            .textAlign(TextAlign.End)
+        }
+        .width('100%')
+        .margin({ top: 12 })
+        .alignItems(VerticalAlign.Center)
+
+        Row() {
+          Text('No-presence delay')
+            .fontSize(14)
+            .fontColor($r('app.color.text_secondary'))
+            .width(120)
+          Slider({
+            value: this.noPresenceDelay,
+            min: Constants.NO_PRESENCE_DELAY_MIN,
+            max: Constants.NO_PRESENCE_DELAY_MAX,
+            step: 5,
+            style: SliderStyle.OutSet
+          })
+            .layoutWeight(1)
+            .trackColor($r('app.color.divider'))
+            .selectedColor($r('app.color.accent'))
+            .onChange((value: number) => {
+              this.noPresenceDelay = value;
+              this.deviceManager.configureLightingAutomation(true, this.illuminanceThreshold, value);
+            })
+          Text(this.noPresenceDelay.toFixed(0) + ' s')
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .width(52)
             .textAlign(TextAlign.End)
         }
         .width('100%')

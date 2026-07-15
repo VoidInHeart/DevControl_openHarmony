@@ -10,6 +10,7 @@ export class ACMode {
   static readonly HEAT: number = 1;
   static readonly FAN: number = 2;
   static readonly AUTO: number = 3;
+  static readonly DRY: number = 4;
 }
 
 export class DeviceState {
@@ -24,6 +25,13 @@ export class DeviceState {
   targetTemp: number = 26;
   targetHumidity: number = 50;
   batteryLevel: number = 100;
+  status: string = 'locked';
+  presence: boolean = false;
+  illuminanceLux: number = 300;
+  automationEnabled: boolean = false;
+  manualOverrideUntil: number = 0;
+  running: boolean = false;
+  autoLockAt: number = 0;
 }
 
 export class DeviceInfo {
@@ -31,6 +39,11 @@ export class DeviceInfo {
   name: string = '';
   type: number = DeviceType.DOOR;
   brand: string = '';
+  roomId: string = '';
+  stateVersion: number = 0;
+  updatedAt: number = 0;
+  pendingAction: string = '';
+  lastError: string = '';
   state: DeviceState = new DeviceState();
 }
 
@@ -46,6 +59,7 @@ export class AccessLogEntry {
   deviceId: string = '';
   action: string = '';
   result: string = '';
+  reason: string = '';
 }
 
 export class AlertEntry {
