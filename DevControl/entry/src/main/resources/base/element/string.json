@@ -2,15 +2,171 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "module description"
+      "value": "Smart Home Control System"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "description"
+      "value": "DevControl Smart Home"
     },
     {
       "name": "EntryAbility_label",
-      "value": "label"
+      "value": "DevControl"
+    },
+    {
+      "name": "tab_control_center",
+      "value": "Control Center"
+    },
+    {
+      "name": "tab_lighting",
+      "value": "Lighting"
+    },
+    {
+      "name": "tab_temperature",
+      "value": "Climate"
+    },
+    {
+      "name": "tab_door_lock",
+      "value": "Door Lock"
+    },
+    {
+      "name": "device_online",
+      "value": "Online"
+    },
+    {
+      "name": "device_offline",
+      "value": "Offline"
+    },
+    {
+      "name": "light_on",
+      "value": "On"
+    },
+    {
+      "name": "light_off",
+      "value": "Off"
+    },
+    {
+      "name": "brightness",
+      "value": "Brightness"
+    },
+    {
+      "name": "auto_mode",
+      "value": "Auto Mode"
+    },
+    {
+      "name": "temperature",
+      "value": "Temperature"
+    },
+    {
+      "name": "humidity",
+      "value": "Humidity"
+    },
+    {
+      "name": "ac_power_on",
+      "value": "Power On"
+    },
+    {
+      "name": "ac_power_off",
+      "value": "Power Off"
+    },
+    {
+      "name": "target_temp",
+      "value": "Target Temp"
+    },
+    {
+      "name": "ac_mode_cool",
+      "value": "Cool"
+    },
+    {
+      "name": "ac_mode_heat",
+      "value": "Heat"
+    },
+    {
+      "name": "ac_mode_fan",
+      "value": "Fan"
+    },
+    {
+      "name": "ac_mode_auto",
+      "value": "Auto"
+    },
+    {
+      "name": "brand_haier",
+      "value": "Haier"
+    },
+    {
+      "name": "brand_gree",
+      "value": "Gree"
+    },
+    {
+      "name": "brand_midea",
+      "value": "Midea"
+    },
+    {
+      "name": "door_locked",
+      "value": "Locked"
+    },
+    {
+      "name": "door_unlocked",
+      "value": "Unlocked"
+    },
+    {
+      "name": "unlock",
+      "value": "Unlock"
+    },
+    {
+      "name": "lock",
+      "value": "Lock"
+    },
+    {
+      "name": "access_log",
+      "value": "Access Log"
+    },
+    {
+      "name": "alert_list",
+      "value": "Alerts"
+    },
+    {
+      "name": "scene_mode",
+      "value": "Scenes"
+    },
+    {
+      "name": "scene_home",
+      "value": "Home"
+    },
+    {
+      "name": "scene_away",
+      "value": "Away"
+    },
+    {
+      "name": "scene_sleep",
+      "value": "Sleep"
+    },
+    {
+      "name": "device_count_online",
+      "value": "Online Devices"
+    },
+    {
+      "name": "device_count_alert",
+      "value": "Alerts"
+    },
+    {
+      "name": "add_device",
+      "value": "Add Device"
+    },
+    {
+      "name": "no_alerts",
+      "value": "No alerts"
+    },
+    {
+      "name": "motion_sensor_enabled",
+      "value": "Motion Sensor Enabled"
+    },
+    {
+      "name": "sensitivity",
+      "value": "Sensitivity"
+    },
+    {
+      "name": "timing_schedule",
+      "value": "Schedule"
     }
   ]
 }

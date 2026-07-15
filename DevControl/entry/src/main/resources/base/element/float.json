@@ -3,6 +3,58 @@
     {
       "name": "page_text_font_size",
       "value": "50fp"
+    },
+    {
+      "name": "title_font_size",
+      "value": "24fp"
+    },
+    {
+      "name": "subtitle_font_size",
+      "value": "18fp"
+    },
+    {
+      "name": "body_font_size",
+      "value": "14fp"
+    },
+    {
+      "name": "caption_font_size",
+      "value": "12fp"
+    },
+    {
+      "name": "card_radius",
+      "value": "16vp"
+    },
+    {
+      "name": "card_padding",
+      "value": "16vp"
+    },
+    {
+      "name": "item_gap",
+      "value": "12vp"
+    },
+    {
+      "name": "section_gap",
+      "value": "24vp"
+    },
+    {
+      "name": "icon_size_small",
+      "value": "24vp"
+    },
+    {
+      "name": "icon_size_medium",
+      "value": "48vp"
+    },
+    {
+      "name": "icon_size_large",
+      "value": "80vp"
+    },
+    {
+      "name": "slider_height",
+      "value": "40vp"
+    },
+    {
+      "name": "tab_height",
+      "value": "56vp"
     }
   ]
 }

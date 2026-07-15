@@ -3,6 +3,82 @@
     {
       "name": "start_window_background",
       "value": "#FFFFFF"
+    },
+    {
+      "name": "primary",
+      "value": "#007DFF"
+    },
+    {
+      "name": "primary_dark",
+      "value": "#0056B3"
+    },
+    {
+      "name": "accent",
+      "value": "#FF6B35"
+    },
+    {
+      "name": "status_online",
+      "value": "#00B578"
+    },
+    {
+      "name": "status_offline",
+      "value": "#CCCCCC"
+    },
+    {
+      "name": "status_alert",
+      "value": "#FF3B30"
+    },
+    {
+      "name": "status_warning",
+      "value": "#FF9500"
+    },
+    {
+      "name": "card_background",
+      "value": "#F5F5F5"
+    },
+    {
+      "name": "card_background_dark",
+      "value": "#2C2C2C"
+    },
+    {
+      "name": "text_primary",
+      "value": "#182431"
+    },
+    {
+      "name": "text_secondary",
+      "value": "#99182431"
+    },
+    {
+      "name": "divider",
+      "value": "#0D182431"
+    },
+    {
+      "name": "lock_icon_locked",
+      "value": "#FF3B30"
+    },
+    {
+      "name": "lock_icon_unlocked",
+      "value": "#00B578"
+    },
+    {
+      "name": "light_icon_on",
+      "value": "#FFB800"
+    },
+    {
+      "name": "light_icon_off",
+      "value": "#CCCCCC"
+    },
+    {
+      "name": "temp_hot",
+      "value": "#FF3B30"
+    },
+    {
+      "name": "temp_cool",
+      "value": "#007DFF"
+    },
+    {
+      "name": "temp_normal",
+      "value": "#00B578"
     }
   ]
 }

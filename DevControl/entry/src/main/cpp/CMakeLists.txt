@@ -1,4 +1,3 @@
-# the minimum version of CMake.
 cmake_minimum_required(VERSION 3.5.0)
 project(DevControl)
 
@@ -11,5 +10,12 @@ endif()
 include_directories(${NATIVERENDER_ROOT_PATH}
                     ${NATIVERENDER_ROOT_PATH}/include)
 
-add_library(entry SHARED napi_init.cpp)
+add_library(entry SHARED
+    napi_init.cpp
+    src/device_simulator.cpp
+    src/crypto_engine.cpp
+    src/protocol_parser.cpp
+    src/tls_client.cpp
+)
+
 target_link_libraries(entry PUBLIC libace_napi.z.so)

@@ -1,26 +1,57 @@
-import { hilog } from '@kit.PerformanceAnalysisKit';
-import testNapi from 'libentry.so';
-
-const DOMAIN = 0x0000;
+import { DeviceManager } from '../model/DeviceManager';
+import { Constants } from '../common/Constants';
+import { ControlCenterTab } from '../components/ControlCenterTab';
+import { LightingTab } from '../components/LightingTab';
+import { TemperatureTab } from '../components/TemperatureTab';
+import { DoorLockTab } from '../components/DoorLockTab';
 
 @Entry
 @Component
 struct Index {
-  @State message: string = 'Hello World';
+  @Provide deviceManager: DeviceManager = new DeviceManager();
+  @State currentTab: number = 0;
+
+  aboutToAppear(): void {
+    this.deviceManager.init();
+    this.deviceManager.startTick(Constants.TICK_INTERVAL_MS);
+  }
+
+  aboutToDisappear(): void {
+    this.deviceManager.stopTick();
+  }
 
   build() {
-    Row() {
-      Column() {
-        Text(this.message)
-          .fontSize($r('app.float.page_text_font_size'))
-          .fontWeight(FontWeight.Bold)
-          .onClick(() => {
-            this.message = 'Welcome';
-            hilog.info(DOMAIN, 'testTag', 'Test NAPI 2 + 3 = %{public}d', testNapi.add(2, 3));
-          })
+    Column() {
+      Tabs({ index: this.currentTab }) {
+        TabContent() {
+          ControlCenterTab()
+        }
+        .tabBar('Control')
+
+        TabContent() {
+          LightingTab()
+        }
+        .tabBar('Lighting')
+
+        TabContent() {
+          TemperatureTab()
+        }
+        .tabBar('Climate')
+
+        TabContent() {
+          DoorLockTab()
+        }
+        .tabBar('Door')
       }
       .width('100%')
+      .layoutWeight(1)
+      .barMode(BarMode.Fixed)
+      .onChange((index: number) => {
+        this.currentTab = index;
+      })
     }
+    .width('100%')
     .height('100%')
+    .backgroundColor($r('app.color.start_window_background'))
   }
 }
