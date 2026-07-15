@@ -1,7 +1,9 @@
 import { DeviceInfo, DeviceState, DeviceType, AccessLogEntry, AlertEntry, SceneRule, ACMode } from './DeviceModel';
 import { ConnectionState, GatewayConnectionConfig } from './GatewayModels';
 import { WssGatewayTransport } from '../infrastructure/WssGatewayTransport';
+import { GatewaySessionStore, RestoredGatewaySession } from '../infrastructure/GatewaySessionStore';
 import { Constants } from '../common/Constants';
+import { Context } from '@kit.AbilityKit';
 import native from 'libentry.so';
 
 @Observed
@@ -20,10 +22,15 @@ export class DeviceManager {
   private reconnectAttempt: number = 0;
   private reconnectTimer: number = -1;
   private sessionDataKey: string = '';
+  private sessionStore: GatewaySessionStore | null = null;
+  private lifecycleActive: boolean = false;
+  private sessionGeneration: number = 0;
   private transport: WssGatewayTransport = new WssGatewayTransport();
   private pendingCommands: Map<string, string> = new Map<string, string>();
 
-  init(): void {
+  init(context: Context): void {
+    this.lifecycleActive = true;
+    this.sessionStore = new GatewaySessionStore(context);
     this.initScenes();
     this.transport.subscribe((rawMessage: string) => {
       this.handleGatewayMessage(rawMessage);
@@ -38,6 +45,8 @@ export class DeviceManager {
         this.beginReconnect();
       }
     });
+    const generation = ++this.sessionGeneration;
+    this.restorePersistedSession(generation);
   }
 
   async pairAndConnect(endpoint: string, pairingCode: string): Promise<boolean> {
@@ -46,14 +55,12 @@ export class DeviceManager {
       this.connectionMessage = '请输入有效的 HTTPS 地址和 6 位配对码';
       return false;
     }
+    const generation = ++this.sessionGeneration;
     this.gatewayEndpoint = normalized;
     this.connectionState = ConnectionState.CONNECTING;
     this.connectionMessage = '正在检查网关';
-    const config = new GatewayConnectionConfig();
-    config.httpsEndpoint = normalized;
-    config.wssEndpoint = this.toWebSocketEndpoint(normalized);
-    config.connectTimeoutMs = 10000;
-    this.transport.configure(config);
+    this.configureTransport(normalized);
+    let persisted = false;
 
     try {
       const healthy = await this.transport.checkHealth();
@@ -64,10 +71,24 @@ export class DeviceManager {
       this.connectionMessage = '正在安全配对';
       const clientId = 'oh-' + native.createMessageId();
       const pairing = await this.transport.pair(pairingCode.trim(), clientId);
+      if (!this.isSessionGenerationCurrent(generation)) {
+        return false;
+      }
       this.sessionDataKey = pairing.dataKey;
       const snapshot = await this.transport.fetchDeviceSnapshot();
+      if (!this.isSessionGenerationCurrent(generation)) {
+        return false;
+      }
       this.applySnapshot(snapshot);
+      if (this.sessionStore === null) {
+        throw new Error('安全存储尚未初始化');
+      }
+      await this.sessionStore.save(normalized, pairing);
+      persisted = true;
       await this.transport.connect();
+      if (!this.isSessionGenerationCurrent(generation)) {
+        return false;
+      }
       this.connectionState = ConnectionState.ONLINE;
       this.connectionMessage = '网关在线';
       this.lastMessageAt = Date.now();
@@ -75,9 +96,16 @@ export class DeviceManager {
       this.reconnectAttempt = 0;
       return true;
     } catch (error) {
+      if (!persisted) {
+        this.sessionDataKey = '';
+        this.transport.clearSessionCredential();
+      }
       this.connectionState = ConnectionState.DISCONNECTED;
       this.connectionMessage = this.errorText(error);
       this.usingCachedSnapshot = this.devices.length > 0;
+      if (persisted) {
+        this.beginReconnect();
+      }
       return false;
     }
   }
@@ -138,13 +166,92 @@ export class DeviceManager {
   }
 
   close(): void {
+    this.lifecycleActive = false;
+    this.sessionGeneration++;
     this.stopTick();
     if (this.reconnectTimer !== -1) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = -1;
     }
     this.transport.close();
+    this.transport.clearSessionCredential();
     this.sessionDataKey = '';
+  }
+
+  private async restorePersistedSession(generation: number): Promise<void> {
+    const store = this.sessionStore;
+    if (store === null) {
+      return;
+    }
+    this.connectionMessage = '正在恢复安全会话';
+    const restored = await store.restore();
+    if (!this.isSessionGenerationCurrent(generation)) {
+      return;
+    }
+    if (restored === null) {
+      this.connectionMessage = '尚未连接网关';
+      return;
+    }
+
+    this.applyRestoredSession(restored);
+    this.connectionState = ConnectionState.CONNECTING;
+    this.connectionMessage = '正在恢复网关连接';
+    try {
+      const healthy = await this.transport.checkHealth();
+      if (!healthy) {
+        throw new Error('网关协议版本不兼容');
+      }
+      const snapshot = await this.transport.fetchDeviceSnapshot();
+      if (!this.isSessionGenerationCurrent(generation)) {
+        return;
+      }
+      this.applySnapshot(snapshot);
+      await this.transport.connect();
+      if (!this.isSessionGenerationCurrent(generation)) {
+        return;
+      }
+      this.connectionState = ConnectionState.ONLINE;
+      this.connectionMessage = '已恢复安全会话';
+      this.lastMessageAt = Date.now();
+      this.usingCachedSnapshot = false;
+      this.reconnectAttempt = 0;
+    } catch (error) {
+      const message = this.errorText(error);
+      this.connectionState = ConnectionState.DISCONNECTED;
+      this.usingCachedSnapshot = this.devices.length > 0;
+      if (this.isAuthenticationFailure(message)) {
+        await store.clear();
+        this.sessionDataKey = '';
+        this.transport.clearSessionCredential();
+        this.connectionMessage = '保存的配对已失效，请重新配对';
+        return;
+      }
+      this.connectionMessage = message;
+      this.beginReconnect();
+    }
+  }
+
+  private applyRestoredSession(restored: RestoredGatewaySession): void {
+    this.gatewayEndpoint = restored.endpoint;
+    this.configureTransport(restored.endpoint);
+    this.transport.restoreSessionCredential(restored.credential);
+    this.sessionDataKey = restored.dataKey;
+  }
+
+  private configureTransport(endpoint: string): void {
+    const config = new GatewayConnectionConfig();
+    config.httpsEndpoint = endpoint;
+    config.wssEndpoint = this.toWebSocketEndpoint(endpoint);
+    config.connectTimeoutMs = 10000;
+    this.transport.configure(config);
+  }
+
+  private isSessionGenerationCurrent(generation: number): boolean {
+    return this.lifecycleActive && generation === this.sessionGeneration;
+  }
+
+  private isAuthenticationFailure(message: string): boolean {
+    return message.indexOf('HTTP 401') >= 0 || message.indexOf('HTTP 403') >= 0;
   }
 
   addAccessLog(deviceId: string, action: string, result: string, reason: string = ''): void {

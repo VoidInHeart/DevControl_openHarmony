@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\RoyCai\\.ohos\\config\\default_DevControl_gAWgLTVAUGCJsIxW-3bwWMMnBz-HRhppTOMY37O64ak=.cer",
+          "certpath": "C:\\Users\\RoyCai\\.ohos\\config\\default_DevControl_Iwo7oKOo1RbPSXGLTq2_YtjN2xRL_2P0CPonCpfoD3I=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BE1CC90467BD751E4448117A8F06C8FBEAB86C22C24C7B78EB6F5FB4D6EDFF760C341059828CE25",
-          "profile": "C:\\Users\\RoyCai\\.ohos\\config\\default_DevControl_gAWgLTVAUGCJsIxW-3bwWMMnBz-HRhppTOMY37O64ak=.p7b",
+          "keyPassword": "0000001B8291F226664AADDA27601092246FBB9358B42C51549102B97757C80E0F7CF99F5B7D80C7C79946",
+          "profile": "C:\\Users\\RoyCai\\.ohos\\config\\default_DevControl_Iwo7oKOo1RbPSXGLTq2_YtjN2xRL_2P0CPonCpfoD3I=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\RoyCai\\.ohos\\config\\default_DevControl_gAWgLTVAUGCJsIxW-3bwWMMnBz-HRhppTOMY37O64ak=.p12",
-          "storePassword": "0000001BFA0E5045C7F982F365BE327EBE835A0B8B1A8FC81BA8A8F5121DB647B1404EFAFAC5777FF9169C"
+          "storeFile": "C:\\Users\\RoyCai\\.ohos\\config\\default_DevControl_Iwo7oKOo1RbPSXGLTq2_YtjN2xRL_2P0CPonCpfoD3I=.p12",
+          "storePassword": "0000001BB65CDD0144B534013E1F4F7D609D416E5A45E1185204EB02BAFEB180C4DE0C854690F9047885CD"
         }
       }
     ],

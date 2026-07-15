@@ -1,5 +1,7 @@
-import { hilog } from '@kit.PerformanceAnalysisKit';
+import abilityDelegatorRegistry from '@ohos.app.ability.abilityDelegatorRegistry';
 import { describe, beforeAll, beforeEach, afterEach, afterAll, it, expect } from '@ohos/hypium';
+import { GatewaySessionStore } from '../../../main/ets/infrastructure/GatewaySessionStore';
+import { PairingResult } from '../../../main/ets/model/GatewayModels';
 
 export default function abilityTest() {
   describe('ActsAbilityTest', () => {
@@ -22,14 +24,28 @@ export default function abilityTest() {
       // Presets a clear action, which is performed after all test cases of the test suite end.
       // This API supports only one parameter: clear action function.
     })
-    it('assertContain', 0, () => {
-      // Defines a test case. This API supports three parameters: test case name, filter parameter, and test case function.
-      hilog.info(0x0000, 'testTag', '%{public}s', 'it begin');
-      let a = 'abc';
-      let b = 'b';
-      // Defines a variety of assertion methods, which are used to declare expected boolean conditions.
-      expect(a).assertContain(b);
-      expect(a).assertEqual(a);
+    it('persistsGatewaySessionWithHuks', 0, async () => {
+      const ability = await abilityDelegatorRegistry.getAbilityDelegator().getCurrentTopAbility();
+      const store = new GatewaySessionStore(ability.context);
+      const pairing = new PairingResult();
+      pairing.clientId = 'instrument-test-client';
+      pairing.credential = 'instrument-test-credential-0000000000000001';
+      pairing.dataKey = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+      pairing.expiresAt = Date.now() + 60_000;
+
+      await store.clear();
+      try {
+        await store.save('https://127.0.0.1:9443', pairing);
+        const restored = await store.restore();
+        expect(restored === null).assertFalse();
+        expect(restored?.endpoint).assertEqual('https://127.0.0.1:9443');
+        expect(restored?.clientId).assertEqual(pairing.clientId);
+        expect(restored?.credential).assertEqual(pairing.credential);
+        expect(restored?.dataKey).assertEqual(pairing.dataKey);
+        expect(restored?.expiresAt).assertEqual(pairing.expiresAt);
+      } finally {
+        await store.clear();
+      }
     })
   })
 }

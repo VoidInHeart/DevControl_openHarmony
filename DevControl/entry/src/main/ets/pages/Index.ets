@@ -4,6 +4,7 @@ import { ControlCenterTab } from '../components/ControlCenterTab';
 import { LightingTab } from '../components/LightingTab';
 import { TemperatureTab } from '../components/TemperatureTab';
 import { DoorLockTab } from '../components/DoorLockTab';
+import { Context } from '@kit.AbilityKit';
 
 @Entry
 @Component
@@ -12,7 +13,8 @@ struct Index {
   @State currentTab: number = 0;
 
   aboutToAppear(): void {
-    this.deviceManager.init();
+    const context = this.getUIContext().getHostContext() as Context;
+    this.deviceManager.init(context);
     this.deviceManager.startTick(Constants.TICK_INTERVAL_MS);
   }
 

@@ -26,6 +26,8 @@ export type TransportStateHandler = (state: string, message: string) => void;
 
 export interface GatewayTransport {
   configure(config: GatewayConnectionConfig): void;
+  restoreSessionCredential(credential: string): void;
+  clearSessionCredential(): void;
   checkHealth(): Promise<boolean>;
   pair(pairingCode: string, clientId: string): Promise<PairingResult>;
   fetchDeviceSnapshot(): Promise<string>;

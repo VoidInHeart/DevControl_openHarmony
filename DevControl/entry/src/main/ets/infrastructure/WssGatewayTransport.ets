@@ -25,6 +25,14 @@ export class WssGatewayTransport implements GatewayTransport {
     this.config = config;
   }
 
+  restoreSessionCredential(credential: string): void {
+    this.credential = credential;
+  }
+
+  clearSessionCredential(): void {
+    this.credential = '';
+  }
+
   async checkHealth(): Promise<boolean> {
     const raw = await this.request('/api/v1/health', http.RequestMethod.GET, '', false);
     const parsed = JSON.parse(raw) as Record<string, Object>;

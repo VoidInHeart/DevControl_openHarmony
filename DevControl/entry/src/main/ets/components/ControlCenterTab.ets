@@ -1,11 +1,9 @@
 import { DeviceInfo, DeviceType, SceneRule } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
-import { Constants } from '../common/Constants';
 
 @Component
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
-  @State endpoint: string = Constants.DEFAULT_GATEWAY_ENDPOINT;
   @State pairingCode: string = '';
 
   build() {
@@ -47,11 +45,11 @@ export struct ControlCenterTab {
       .width('100%')
 
       if (!this.deviceManager.isOnline()) {
-        TextInput({ text: this.endpoint, placeholder: 'https://网关地址:8443' })
+        TextInput({ text: this.deviceManager.gatewayEndpoint, placeholder: 'https://网关地址:8443' })
           .width('100%')
           .margin({ top: 12 })
           .onChange((value: string) => {
-            this.endpoint = value;
+            this.deviceManager.gatewayEndpoint = value;
           })
         Row() {
           TextInput({ text: this.pairingCode, placeholder: '6 位配对码' })
@@ -69,7 +67,7 @@ export struct ControlCenterTab {
             .enabled(this.deviceManager.connectionState !== 'connecting' &&
               this.deviceManager.connectionState !== 'authenticating')
             .onClick(() => {
-              this.deviceManager.pairAndConnect(this.endpoint, this.pairingCode);
+              this.deviceManager.pairAndConnect(this.deviceManager.gatewayEndpoint, this.pairingCode);
             })
         }
         .width('100%')
