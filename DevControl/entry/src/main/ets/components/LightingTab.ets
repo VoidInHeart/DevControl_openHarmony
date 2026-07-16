@@ -19,7 +19,8 @@ export struct LightingTab {
 
         ForEach(this.deviceManager.getDevicesByType(DeviceType.LIGHT), (device: DeviceInfo) => {
           this.LightCard(device)
-        }, (device: DeviceInfo) => device.id)
+        }, (device: DeviceInfo) => device.id + ':' +
+          (device.state.isOn ? '1' : '0') + ':' + device.state.brightness.toFixed(0))
 
         this.AutoModeSection()
       }
@@ -35,9 +36,10 @@ export struct LightingTab {
   LightCard(device: DeviceInfo) {
     Column() {
       Row() {
-        Text(device.state.isOn ? '💡' : '⚪')
-          .fontSize(32)
+        Text(device.state.isOn ? '💡' : '◯')
+          .fontSize(this.getLightIconSize(device.state.brightness))
           .fontColor(device.state.isOn ? $r('app.color.light_icon_on') : $r('app.color.light_icon_off'))
+          .opacity(this.getLightIconOpacity(device.state.isOn, device.state.brightness))
         Column() {
           Text(device.name)
             .fontSize(16)
@@ -54,7 +56,7 @@ export struct LightingTab {
         Toggle({ type: ToggleType.Switch, isOn: device.state.isOn })
           .onChange((isOn: boolean) => {
             if (isOn) {
-              this.deviceManager.sendCommand(device.id, 'turnOn', '100');
+              this.deviceManager.sendCommand(device.id, 'turnOn', '');
             } else {
               this.deviceManager.sendCommand(device.id, 'turnOff', '');
             }
@@ -164,5 +166,16 @@ export struct LightingTab {
     .borderRadius(16)
     .backgroundColor($r('app.color.card_background'))
     .margin({ top: 4 })
+  }
+
+  private getLightIconOpacity(isOn: boolean, brightness: number): number {
+    if (!isOn) {
+      return 0.35;
+    }
+    return 0.4 + Math.max(0, Math.min(100, brightness)) * 0.006;
+  }
+
+  private getLightIconSize(brightness: number): number {
+    return 28 + Math.max(0, Math.min(100, brightness)) * 0.08;
   }
 }

@@ -18,6 +18,7 @@ struct DeviceState {
     bool isLocked;
     bool isOn;
     double brightness;
+    double lastBrightness;
     double temperature;
     double humidity;
     bool acPower;
@@ -33,6 +34,7 @@ struct DeviceInfo {
     DeviceType type;
     std::string brand;
     DeviceState state;
+    int autoLockTicksRemaining;
 };
 
 class DeviceSimulator {

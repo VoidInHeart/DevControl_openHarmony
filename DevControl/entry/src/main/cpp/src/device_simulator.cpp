@@ -3,6 +3,19 @@
 #include <cstdlib>
 #include <sstream>
 
+namespace {
+double clampValue(double value, double minimum, double maximum)
+{
+    if (value < minimum) {
+        return minimum;
+    }
+    if (value > maximum) {
+        return maximum;
+    }
+    return value;
+}
+}
+
 DeviceSimulator& DeviceSimulator::getInstance()
 {
     static DeviceSimulator instance;
@@ -21,6 +34,7 @@ void DeviceSimulator::registerDevice(const std::string& id, const std::string& n
     info.state.isLocked = true;
     info.state.isOn = false;
     info.state.brightness = 0.0;
+    info.state.lastBrightness = 100.0;
     info.state.temperature = 22.0;
     info.state.humidity = 55.0;
     info.state.acPower = false;
@@ -28,6 +42,7 @@ void DeviceSimulator::registerDevice(const std::string& id, const std::string& n
     info.state.targetTemp = 26.0;
     info.state.targetHumidity = 50.0;
     info.state.batteryLevel = 100.0;
+    info.autoLockTicksRemaining = 0;
     devices_[id] = info;
 }
 
@@ -80,32 +95,43 @@ std::string DeviceSimulator::simulateCommand(const std::string& deviceId, const 
 
     if (command == "lock") {
         device.state.isLocked = true;
+        device.autoLockTicksRemaining = 0;
         return "{\"result\":\"ok\",\"state\":\"locked\"}";
     } else if (command == "unlock") {
         device.state.isLocked = false;
+        device.autoLockTicksRemaining = 5;
         return "{\"result\":\"ok\",\"state\":\"unlocked\"}";
     } else if (command == "turnOn") {
         device.state.isOn = true;
-        if (device.type == DEVICE_LIGHT && !param.empty()) {
-            double val = std::atof(param.c_str());
-            device.state.brightness = val > 0 ? val : 100.0;
+        if (device.type == DEVICE_LIGHT) {
+            if (!param.empty()) {
+                double val = clampValue(std::atof(param.c_str()), 0.0, 100.0);
+                device.state.brightness = val > 0 ? val : device.state.lastBrightness;
+            } else {
+                device.state.brightness = device.state.lastBrightness > 0 ? device.state.lastBrightness : 100.0;
+            }
+            device.state.lastBrightness = device.state.brightness;
         } else {
             device.state.brightness = 100.0;
         }
         return "{\"result\":\"ok\",\"state\":\"on\"}";
     } else if (command == "turnOff") {
+        if (device.type == DEVICE_LIGHT && device.state.brightness > 0) {
+            device.state.lastBrightness = device.state.brightness;
+        }
         device.state.isOn = false;
         device.state.brightness = 0.0;
         return "{\"result\":\"ok\",\"state\":\"off\"}";
     } else if (command == "setBrightness") {
-        double val = std::atof(param.c_str());
+        double val = clampValue(std::atof(param.c_str()), 0.0, 100.0);
         device.state.brightness = val;
         if (val > 0) {
             device.state.isOn = true;
+            device.state.lastBrightness = val;
         } else {
             device.state.isOn = false;
         }
-        return "{\"result\":\"ok\",\"brightness\":" + param + "}";
+        return "{\"result\":\"ok\",\"brightness\":" + std::to_string(val) + "}";
     } else if (command == "acPowerOn") {
         device.state.acPower = true;
         return "{\"result\":\"ok\",\"state\":\"on\"}";
@@ -113,13 +139,13 @@ std::string DeviceSimulator::simulateCommand(const std::string& deviceId, const 
         device.state.acPower = false;
         return "{\"result\":\"ok\",\"state\":\"off\"}";
     } else if (command == "setTargetTemp") {
-        double val = std::atof(param.c_str());
+        double val = clampValue(std::atof(param.c_str()), 16.0, 30.0);
         device.state.targetTemp = val;
-        return "{\"result\":\"ok\",\"targetTemp\":" + param + "}";
+        return "{\"result\":\"ok\",\"targetTemp\":" + std::to_string(val) + "}";
     } else if (command == "setTargetHumidity") {
-        double val = std::atof(param.c_str());
+        double val = clampValue(std::atof(param.c_str()), 20.0, 80.0);
         device.state.targetHumidity = val;
-        return "{\"result\":\"ok\",\"targetHumidity\":" + param + "}";
+        return "{\"result\":\"ok\",\"targetHumidity\":" + std::to_string(val) + "}";
     } else if (command == "setACMode") {
         int val = std::atoi(param.c_str());
         device.state.acMode = val;
@@ -201,6 +227,12 @@ void DeviceSimulator::tick()
             updateSensorData(device);
             updateACEffect(device);
         } else if (device.type == DEVICE_DOOR) {
+            if (!device.state.isLocked && device.autoLockTicksRemaining > 0) {
+                device.autoLockTicksRemaining--;
+                if (device.autoLockTicksRemaining == 0) {
+                    device.state.isLocked = true;
+                }
+            }
             if (device.state.batteryLevel > 0 && tickCount_ % 60 == 0) {
                 device.state.batteryLevel -= 0.1;
                 if (device.state.batteryLevel < 0) {

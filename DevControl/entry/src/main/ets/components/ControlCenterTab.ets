@@ -4,6 +4,7 @@ import { DeviceManager } from '../model/DeviceManager';
 @Component
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
+  @State sceneFeedback: string = '';
 
   build() {
     Scroll() {
@@ -96,12 +97,24 @@ export struct ControlCenterTab {
             .borderRadius(20)
             .padding({ left: 20, right: 20, top: 8, bottom: 8 })
             .onClick(() => {
-              this.deviceManager.executeScene(scene['id']);
+              const feedback = this.deviceManager.executeScene(scene['id']);
+              setTimeout(() => {
+                this.sceneFeedback = feedback;
+              }, 0);
             })
         }, (scene: Record<string, string>) => scene['id'])
       }
       .width('100%')
       .justifyContent(FlexAlign.SpaceAround)
+
+      if (this.sceneFeedback.length > 0) {
+        Text(this.sceneFeedback)
+          .fontSize(13)
+          .fontColor($r('app.color.status_online'))
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ top: 12 })
+      }
     }
     .width('100%')
     .padding(16)
@@ -146,7 +159,7 @@ export struct ControlCenterTab {
         .backgroundColor($r('app.color.card_background'))
         .margin({ bottom: 6 })
         .alignItems(VerticalAlign.Center)
-      }, (device: DeviceInfo) => device.id)
+      }, (device: DeviceInfo) => this.getDeviceRenderKey(device))
     }
     .width('100%')
   }
@@ -181,5 +194,17 @@ export struct ControlCenterTab {
       return device.state.acPower ? 'On ' + device.state.targetTemp.toFixed(0) + '°C' : 'Off';
     }
     return '';
+  }
+
+  private getDeviceRenderKey(device: DeviceInfo): string {
+    return device.id + ':' +
+      (device.state.online ? '1' : '0') + ':' +
+      (device.state.isLocked ? '1' : '0') + ':' +
+      (device.state.isOn ? '1' : '0') + ':' +
+      device.state.brightness.toFixed(0) + ':' +
+      device.state.temperature.toFixed(1) + ':' +
+      device.state.humidity.toFixed(0) + ':' +
+      (device.state.acPower ? '1' : '0') + ':' +
+      device.state.targetTemp.toFixed(0);
   }
 }

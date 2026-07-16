@@ -1,6 +1,5 @@
 import { DeviceInfo, DeviceType, ACMode } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
-import { BrandAdapter, createBrandAdapter } from '../model/BrandAdapter';
 import { Constants } from '../common/Constants';
 
 @Component
@@ -8,11 +7,11 @@ export struct TemperatureTab {
   @Consume deviceManager: DeviceManager;
   @State selectedACIndex: number = 0;
 
-  private get acDevices(): DeviceInfo[] {
+  private getACDevices(): DeviceInfo[] {
     return this.deviceManager.getDevicesByType(DeviceType.AC);
   }
 
-  private get sensorDevices(): DeviceInfo[] {
+  private getSensorDevices(): DeviceInfo[] {
     return this.deviceManager.getDevicesByType(DeviceType.SENSOR);
   }
 
@@ -41,7 +40,7 @@ export struct TemperatureTab {
         .width('100%')
         .margin({ bottom: 12 })
 
-      ForEach(this.sensorDevices, (sensor: DeviceInfo) => {
+      ForEach(this.getSensorDevices(), (sensor: DeviceInfo) => {
         Row() {
           Column() {
             Text('🌡 Temperature')
@@ -74,7 +73,8 @@ export struct TemperatureTab {
         .borderRadius(16)
         .backgroundColor($r('app.color.card_background'))
         .margin({ bottom: 8 })
-      }, (sensor: DeviceInfo) => sensor.id)
+      }, (sensor: DeviceInfo) => sensor.id + ':' +
+        sensor.state.temperature.toFixed(1) + ':' + sensor.state.humidity.toFixed(0))
     }
     .width('100%')
     .margin({ bottom: 16 })
@@ -90,8 +90,16 @@ export struct TemperatureTab {
         .width('100%')
         .margin({ bottom: 12 })
 
-      if (this.acDevices.length > 0) {
-        this.ACUnitCard(this.acDevices[this.selectedACIndex])
+      if (this.getACDevices().length > 0) {
+        ForEach(this.getACDevices(), (ac: DeviceInfo, index: number) => {
+          if (index === this.selectedACIndex) {
+            this.ACUnitCard(ac)
+          }
+        }, (ac: DeviceInfo) => ac.id + ':' +
+          (ac.state.acPower ? '1' : '0') + ':' +
+          ac.state.acMode.toString() + ':' +
+          ac.state.targetTemp.toFixed(0) + ':' +
+          ac.state.targetHumidity.toFixed(0))
       } else {
         Text('No AC devices available')
           .fontSize(14)
@@ -160,7 +168,6 @@ export struct TemperatureTab {
             .trackColor($r('app.color.divider'))
             .selectedColor($r('app.color.temp_cool'))
             .onChange((value: number) => {
-              const adapter: BrandAdapter = createBrandAdapter(ac.brand);
               this.deviceManager.sendCommand(ac.id, 'setTargetTemp', value.toFixed(0));
             })
 
@@ -228,8 +235,8 @@ export struct TemperatureTab {
       .borderRadius(16)
       .padding({ left: 16, right: 16, top: 6, bottom: 6 })
       .onClick(() => {
-        if (this.acDevices.length > 0) {
-          const ac = this.acDevices[this.selectedACIndex];
+        if (this.getACDevices().length > 0 && this.selectedACIndex < this.getACDevices().length) {
+          const ac = this.getACDevices()[this.selectedACIndex];
           this.deviceManager.sendCommand(ac.id, 'setACMode', mode.toString());
         }
       })
@@ -246,7 +253,7 @@ export struct TemperatureTab {
         .margin({ bottom: 8 })
 
       Row() {
-        ForEach(this.acDevices, (ac: DeviceInfo, index: number) => {
+        ForEach(this.getACDevices(), (ac: DeviceInfo, index: number) => {
           Button(ac.brand.charAt(0).toUpperCase() + ac.brand.slice(1))
             .fontSize(13)
             .fontColor(this.selectedACIndex === index ? Color.White : $r('app.color.text_primary'))

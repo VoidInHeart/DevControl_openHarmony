@@ -32,7 +32,8 @@ export struct DoorLockTab {
 
       ForEach(this.deviceManager.getDevicesByType(DeviceType.DOOR), (device: DeviceInfo) => {
         this.DoorCard(device)
-      }, (device: DeviceInfo) => device.id)
+      }, (device: DeviceInfo) => device.id + ':' +
+        (device.state.isLocked ? '1' : '0') + ':' + device.state.batteryLevel.toFixed(1))
     }
     .width('100%')
   }
@@ -85,7 +86,22 @@ export struct DoorLockTab {
           .enabled(device.state.isLocked)
           .opacity(device.state.isLocked ? 1 : 0.4)
           .onClick(() => {
-            this.deviceManager.sendCommand(device.id, 'unlock', '');
+            AlertDialog.show({
+              title: 'Confirm unlock',
+              message: 'Unlock ' + device.name + '?',
+              primaryButton: {
+                value: 'Cancel',
+                action: () => {
+                }
+              },
+              secondaryButton: {
+                value: 'Unlock',
+                fontColor: $r('app.color.status_alert'),
+                action: () => {
+                  this.deviceManager.sendCommand(device.id, 'unlock', '');
+                }
+              }
+            })
           })
       }
       .margin({ top: 16, bottom: 16 })
@@ -168,17 +184,6 @@ export struct DoorLockTab {
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
-        Blank()
-        if (this.deviceManager.accessLogs.length > 0) {
-          Button('Clear')
-            .fontSize(12)
-            .fontColor($r('app.color.primary'))
-            .backgroundColor(Color.Transparent)
-            .padding(0)
-            .onClick(() => {
-              this.deviceManager.clearAccessLogs();
-            })
-        }
       }
       .width('100%')
 

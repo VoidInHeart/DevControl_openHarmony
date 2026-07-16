@@ -5,8 +5,23 @@
 #include "tls_client.h"
 #include <string>
 #include <sstream>
+#include <vector>
 
 static TLSClient g_tlsClient;
+
+static std::string getStringArgument(napi_env env, napi_value value)
+{
+    size_t length = 0;
+    if (napi_get_value_string_utf8(env, value, nullptr, 0, &length) != napi_ok) {
+        return "";
+    }
+    std::vector<char> buffer(length + 1, '\0');
+    size_t copied = 0;
+    if (napi_get_value_string_utf8(env, value, buffer.data(), buffer.size(), &copied) != napi_ok) {
+        return "";
+    }
+    return std::string(buffer.data(), copied);
+}
 
 static std::string deviceStateToJson(const DeviceState& state) {
     std::ostringstream oss;
@@ -42,20 +57,9 @@ static napi_value SimulateDevice(napi_env env, napi_callback_info info)
     napi_value args[3] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    size_t deviceIdLen = 0;
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &deviceIdLen);
-    std::string deviceId(deviceIdLen, '\0');
-    napi_get_value_string_utf8(env, args[0], &deviceId[0], deviceIdLen + 1, &deviceIdLen);
-
-    size_t commandLen = 0;
-    napi_get_value_string_utf8(env, args[1], nullptr, 0, &commandLen);
-    std::string command(commandLen, '\0');
-    napi_get_value_string_utf8(env, args[1], &command[0], commandLen + 1, &commandLen);
-
-    size_t paramLen = 0;
-    napi_get_value_string_utf8(env, args[2], nullptr, 0, &paramLen);
-    std::string param(paramLen, '\0');
-    napi_get_value_string_utf8(env, args[2], &param[0], paramLen + 1, &paramLen);
+    std::string deviceId = getStringArgument(env, args[0]);
+    std::string command = getStringArgument(env, args[1]);
+    std::string param = getStringArgument(env, args[2]);
 
     std::string result = DeviceSimulator::getInstance().simulateCommand(deviceId, command, param);
 
@@ -87,10 +91,7 @@ static napi_value GetDeviceStateAsJson(napi_env env, napi_callback_info info)
     napi_value args[1] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    size_t len = 0;
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &len);
-    std::string deviceId(len, '\0');
-    napi_get_value_string_utf8(env, args[0], &deviceId[0], len + 1, &len);
+    std::string deviceId = getStringArgument(env, args[0]);
 
     DeviceState state = DeviceSimulator::getInstance().getDeviceState(deviceId);
     std::string result = deviceStateToJson(state);
@@ -106,15 +107,8 @@ static napi_value EncryptData(napi_env env, napi_callback_info info)
     napi_value args[2] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    size_t dataLen = 0;
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &dataLen);
-    std::string data(dataLen, '\0');
-    napi_get_value_string_utf8(env, args[0], &data[0], dataLen + 1, &dataLen);
-
-    size_t keyLen = 0;
-    napi_get_value_string_utf8(env, args[1], nullptr, 0, &keyLen);
-    std::string key(keyLen, '\0');
-    napi_get_value_string_utf8(env, args[1], &key[0], keyLen + 1, &keyLen);
+    std::string data = getStringArgument(env, args[0]);
+    std::string key = getStringArgument(env, args[1]);
 
     std::string result = CryptoEngine::encryptData(data, key);
 
@@ -129,15 +123,8 @@ static napi_value DecryptData(napi_env env, napi_callback_info info)
     napi_value args[2] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    size_t dataLen = 0;
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &dataLen);
-    std::string data(dataLen, '\0');
-    napi_get_value_string_utf8(env, args[0], &data[0], dataLen + 1, &dataLen);
-
-    size_t keyLen = 0;
-    napi_get_value_string_utf8(env, args[1], nullptr, 0, &keyLen);
-    std::string key(keyLen, '\0');
-    napi_get_value_string_utf8(env, args[1], &key[0], keyLen + 1, &keyLen);
+    std::string data = getStringArgument(env, args[0]);
+    std::string key = getStringArgument(env, args[1]);
 
     std::string result = CryptoEngine::decryptData(data, key);
 
@@ -152,15 +139,8 @@ static napi_value HmacSign(napi_env env, napi_callback_info info)
     napi_value args[2] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    size_t dataLen = 0;
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &dataLen);
-    std::string data(dataLen, '\0');
-    napi_get_value_string_utf8(env, args[0], &data[0], dataLen + 1, &dataLen);
-
-    size_t keyLen = 0;
-    napi_get_value_string_utf8(env, args[1], nullptr, 0, &keyLen);
-    std::string key(keyLen, '\0');
-    napi_get_value_string_utf8(env, args[1], &key[0], keyLen + 1, &keyLen);
+    std::string data = getStringArgument(env, args[0]);
+    std::string key = getStringArgument(env, args[1]);
 
     std::string result = CryptoEngine::hmacSign(data, key);
 
@@ -175,10 +155,7 @@ static napi_value ParseDeviceCommand(napi_env env, napi_callback_info info)
     napi_value args[1] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    size_t len = 0;
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &len);
-    std::string raw(len, '\0');
-    napi_get_value_string_utf8(env, args[0], &raw[0], len + 1, &len);
+    std::string raw = getStringArgument(env, args[0]);
 
     DeviceCommand cmd = ProtocolParser::parseCommand(raw);
     std::ostringstream oss;
@@ -199,20 +176,9 @@ static napi_value BuildCommand(napi_env env, napi_callback_info info)
     napi_value args[3] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    size_t deviceIdLen = 0;
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &deviceIdLen);
-    std::string deviceId(deviceIdLen, '\0');
-    napi_get_value_string_utf8(env, args[0], &deviceId[0], deviceIdLen + 1, &deviceIdLen);
-
-    size_t actionLen = 0;
-    napi_get_value_string_utf8(env, args[1], nullptr, 0, &actionLen);
-    std::string action(actionLen, '\0');
-    napi_get_value_string_utf8(env, args[1], &action[0], actionLen + 1, &actionLen);
-
-    size_t paramLen = 0;
-    napi_get_value_string_utf8(env, args[2], nullptr, 0, &paramLen);
-    std::string param(paramLen, '\0');
-    napi_get_value_string_utf8(env, args[2], &param[0], paramLen + 1, &paramLen);
+    std::string deviceId = getStringArgument(env, args[0]);
+    std::string action = getStringArgument(env, args[1]);
+    std::string param = getStringArgument(env, args[2]);
 
     std::string result = ProtocolParser::buildCommand(deviceId, action, param);
 
@@ -227,10 +193,7 @@ static napi_value TlsConnect(napi_env env, napi_callback_info info)
     napi_value args[2] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    size_t hostLen = 0;
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &hostLen);
-    std::string host(hostLen, '\0');
-    napi_get_value_string_utf8(env, args[0], &host[0], hostLen + 1, &hostLen);
+    std::string host = getStringArgument(env, args[0]);
 
     int32_t port = 0;
     napi_get_value_int32(env, args[1], &port);
@@ -252,10 +215,7 @@ static napi_value TlsSend(napi_env env, napi_callback_info info)
     napi_value args[1] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    size_t dataLen = 0;
-    napi_get_value_string_utf8(env, args[0], nullptr, 0, &dataLen);
-    std::string data(dataLen, '\0');
-    napi_get_value_string_utf8(env, args[0], &data[0], dataLen + 1, &dataLen);
+    std::string data = getStringArgument(env, args[0]);
 
     std::string result = g_tlsClient.send(data);
 

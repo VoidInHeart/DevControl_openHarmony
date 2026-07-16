@@ -1,6 +1,7 @@
 import { DeviceInfo, DeviceState, DeviceType, AccessLogEntry, AlertEntry, SceneRule } from './DeviceModel';
 import native from 'libentry.so';
 
+@Observed
 export class DeviceManager {
   devices: DeviceInfo[] = [];
   accessLogs: AccessLogEntry[] = [];
@@ -147,10 +148,7 @@ export class DeviceManager {
     entry.deviceId = deviceId;
     entry.action = action;
     entry.result = result.indexOf('"ok"') >= 0 ? 'success' : 'failed';
-    this.accessLogs.unshift(entry);
-    if (this.accessLogs.length > 50) {
-      this.accessLogs.pop();
-    }
+    this.accessLogs = [entry, ...this.accessLogs].slice(0, 50);
   }
 
   addAlert(deviceId: string, level: string, message: string): void {
@@ -162,10 +160,7 @@ export class DeviceManager {
     entry.deviceId = deviceId;
     entry.level = level;
     entry.message = message;
-    this.alerts.unshift(entry);
-    if (this.alerts.length > 20) {
-      this.alerts.pop();
-    }
+    this.alerts = [entry, ...this.alerts].slice(0, 20);
   }
 
   private initScenes(): void {
@@ -173,36 +168,61 @@ export class DeviceManager {
     homeScene.id = 'scene_home';
     homeScene.name = 'Home';
     homeScene.enabled = true;
-    homeScene.actions = ['light_001:turnOn', 'light_002:turnOn', 'door_001:unlock'];
+    homeScene.actions = ['light_001:turnOn', 'light_002:turnOn', 'ac_001:acPowerOn'];
 
     const awayScene = new SceneRule();
     awayScene.id = 'scene_away';
     awayScene.name = 'Away';
     awayScene.enabled = true;
-    awayScene.actions = ['light_001:turnOff', 'light_002:turnOff', 'light_003:turnOff', 'door_001:lock', 'door_002:lock'];
+    awayScene.actions = [
+      'light_001:turnOff',
+      'light_002:turnOff',
+      'light_003:turnOff',
+      'ac_001:acPowerOff',
+      'ac_002:acPowerOff',
+      'door_001:lock',
+      'door_002:lock'
+    ];
 
     const sleepScene = new SceneRule();
     sleepScene.id = 'scene_sleep';
     sleepScene.name = 'Sleep';
     sleepScene.enabled = true;
-    sleepScene.actions = ['light_001:turnOff', 'light_002:turnOff', 'light_003:turnOff', 'door_001:lock', 'ac_001:acPowerOn'];
+    sleepScene.actions = [
+      'light_001:turnOff',
+      'light_002:turnOff',
+      'light_003:turnOff',
+      'door_001:lock',
+      'door_002:lock',
+      'ac_001:acPowerOn'
+    ];
 
     this.scenes = [homeScene, awayScene, sleepScene];
   }
 
-  executeScene(sceneId: string): void {
+  executeScene(sceneId: string): string {
     for (let i = 0; i < this.scenes.length; i++) {
       if (this.scenes[i].id === sceneId && this.scenes[i].enabled) {
         const actions = this.scenes[i].actions;
+        let successCount = 0;
         for (let j = 0; j < actions.length; j++) {
           const parts = actions[j].split(':');
           if (parts.length >= 2) {
-            this.sendCommand(parts[0], parts[1], '');
+            const result = this.sendCommand(parts[0], parts[1], '');
+            if (result.indexOf('"result":"ok"') >= 0) {
+              successCount++;
+            }
           }
         }
-        break;
+        const failedCount = actions.length - successCount;
+        if (failedCount === 0) {
+          return this.scenes[i].name + ' scene applied';
+        }
+        return this.scenes[i].name + ' scene: ' + successCount.toString() + ' succeeded, ' +
+          failedCount.toString() + ' failed';
       }
     }
+    return 'Scene is unavailable';
   }
 
   clearAlerts(): void {
