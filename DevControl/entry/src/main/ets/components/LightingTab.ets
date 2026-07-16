@@ -1,28 +1,24 @@
-import { DeviceInfo, DeviceType } from '../model/DeviceModel';
+import { LightDevice } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
 
 @Component
 export struct LightingTab {
   @Consume deviceManager: DeviceManager;
-  @State autoModeEnabled: boolean = false;
-  @State sensitivity: number = 50;
 
   build() {
     Scroll() {
       Column() {
-        Text('Room Lights')
+        Text('照明中心')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
           .width('100%')
           .margin({ bottom: 16 })
 
-        ForEach(this.deviceManager.getDevicesByType(DeviceType.LIGHT), (device: DeviceInfo) => {
+        ForEach(this.deviceManager.getLights(), (device: LightDevice) => {
           this.LightCard(device)
-        }, (device: DeviceInfo) => device.id + ':' +
-          (device.state.isOn ? '1' : '0') + ':' + device.state.brightness.toFixed(0))
-
-        this.AutoModeSection()
+          this.AutomationCard(device)
+        }, (device: LightDevice) => device.id + ':' + device.stateVersion.toString())
       }
       .width('100%')
       .padding(16)
@@ -33,19 +29,21 @@ export struct LightingTab {
   }
 
   @Builder
-  LightCard(device: DeviceInfo) {
+  LightCard(device: LightDevice) {
     Column() {
       Row() {
-        Text(device.state.isOn ? '💡' : '◯')
-          .fontSize(this.getLightIconSize(device.state.brightness))
-          .fontColor(device.state.isOn ? $r('app.color.light_icon_on') : $r('app.color.light_icon_off'))
-          .opacity(this.getLightIconOpacity(device.state.isOn, device.state.brightness))
+        Text(device.state.power ? '💡' : '○')
+          .fontSize(32)
+          .fontColor(device.state.power ?
+            $r('app.color.light_icon_on') : $r('app.color.light_icon_off'))
+          .opacity(this.getLightIconOpacity(device.state.power, device.state.brightness))
         Column() {
           Text(device.name)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
-          Text(device.state.isOn ? 'On - ' + device.state.brightness.toFixed(0) + '%' : 'Off')
+          Text(device.state.power ?
+            '开启 · ' + device.state.brightness.toFixed(0) + '%' : '关闭')
             .fontSize(13)
             .fontColor($r('app.color.text_secondary'))
             .margin({ top: 2 })
@@ -53,48 +51,51 @@ export struct LightingTab {
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
         .margin({ left: 12 })
-        Toggle({ type: ToggleType.Switch, isOn: device.state.isOn })
+        if (this.deviceManager.isDevicePending(device.id)) {
+          Text('处理中')
+            .fontSize(12)
+            .fontColor($r('app.color.status_warning'))
+            .margin({ right: 8 })
+        }
+        Toggle({ type: ToggleType.Switch, isOn: device.state.power })
+          .enabled(this.canControl(device))
+          .opacity(this.canControl(device) ? 1 : 0.45)
           .onChange((isOn: boolean) => {
-            if (isOn) {
-              this.deviceManager.sendCommand(device.id, 'turnOn', '');
-            } else {
-              this.deviceManager.sendCommand(device.id, 'turnOff', '');
-            }
+            this.deviceManager.setLightPower(device, isOn);
           })
           .selectedColor($r('app.color.primary'))
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      if (device.state.isOn) {
-        Row() {
-          Text('Brightness')
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-            .width(80)
-          Slider({
-            value: device.state.brightness,
-            min: 0,
-            max: 100,
-            step: 5,
-            style: SliderStyle.OutSet
+      Row() {
+        Text('亮度')
+          .fontSize(14)
+          .fontColor($r('app.color.text_secondary'))
+          .width(54)
+        Slider({
+          value: device.state.brightness,
+          min: 0,
+          max: 100,
+          step: 1,
+          style: SliderStyle.OutSet
+        })
+          .layoutWeight(1)
+          .enabled(this.canControl(device))
+          .trackColor($r('app.color.divider'))
+          .selectedColor($r('app.color.primary'))
+          .onChange((value: number) => {
+            this.deviceManager.setLightBrightness(device, value);
           })
-            .layoutWeight(1)
-            .trackColor($r('app.color.divider'))
-            .selectedColor($r('app.color.primary'))
-            .onChange((value: number) => {
-              this.deviceManager.sendCommand(device.id, 'setBrightness', value.toFixed(0));
-            })
-          Text(device.state.brightness.toFixed(0) + '%')
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
-            .width(44)
-            .textAlign(TextAlign.End)
-        }
-        .width('100%')
-        .margin({ top: 12 })
-        .alignItems(VerticalAlign.Center)
+        Text(device.state.brightness.toFixed(0) + '%')
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .width(44)
+          .textAlign(TextAlign.End)
       }
+      .width('100%')
+      .margin({ top: 14 })
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
     .padding(16)
@@ -104,78 +105,109 @@ export struct LightingTab {
   }
 
   @Builder
-  AutoModeSection() {
+  AutomationCard(device: LightDevice) {
     Column() {
       Row() {
         Column() {
-          Text('Motion Sensor Auto Mode')
+          Text('人体与照度自动照明')
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
-          Text('Automatically turn lights on/off based on motion')
+          Text('手动控制后由网关保留5分钟优先权')
             .fontSize(12)
             .fontColor($r('app.color.text_secondary'))
             .margin({ top: 4 })
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.autoModeEnabled })
-          .onChange((isOn: boolean) => {
-            this.autoModeEnabled = isOn;
-            if (isOn) {
-              this.deviceManager.addAlert('system', 'info', 'Auto mode enabled');
-            }
+        Toggle({ type: ToggleType.Switch, isOn: device.state.automation.enabled })
+          .enabled(this.canControl(device))
+          .onChange((enabled: boolean) => {
+            this.deviceManager.setLightAutomation(
+              device,
+              enabled,
+              device.state.automation.illuminanceThresholdLux,
+              device.state.automation.noPresenceDelaySeconds
+            );
           })
-          .selectedColor($r('app.color.status_online'))
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
 
-      if (this.autoModeEnabled) {
-        Row() {
-          Text('Sensitivity')
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-            .width(90)
-          Slider({
-            value: this.sensitivity,
-            min: 0,
-            max: 100,
-            step: 10,
-            style: SliderStyle.OutSet
+      Row() {
+        Text('照度阈值')
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+          .width(72)
+        Slider({
+          value: device.state.automation.illuminanceThresholdLux,
+          min: 10,
+          max: 500,
+          step: 10,
+          style: SliderStyle.OutSet
+        })
+          .layoutWeight(1)
+          .enabled(this.canControl(device))
+          .onChange((value: number) => {
+            this.deviceManager.setLightAutomation(
+              device,
+              device.state.automation.enabled,
+              value,
+              device.state.automation.noPresenceDelaySeconds
+            );
           })
-            .layoutWeight(1)
-            .trackColor($r('app.color.divider'))
-            .selectedColor($r('app.color.accent'))
-            .onChange((value: number) => {
-              this.sensitivity = value;
-            })
-          Text(this.sensitivity.toFixed(0) + '%')
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
-            .width(44)
-            .textAlign(TextAlign.End)
-        }
-        .width('100%')
-        .margin({ top: 12 })
-        .alignItems(VerticalAlign.Center)
+        Text(device.state.automation.illuminanceThresholdLux.toFixed(0) + ' lx')
+          .fontSize(12)
+          .width(54)
+          .textAlign(TextAlign.End)
       }
+      .width('100%')
+      .margin({ top: 14 })
+
+      Row() {
+        Text('无人延时')
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+          .width(72)
+        Slider({
+          value: device.state.automation.noPresenceDelaySeconds,
+          min: 5,
+          max: 600,
+          step: 5,
+          style: SliderStyle.OutSet
+        })
+          .layoutWeight(1)
+          .enabled(this.canControl(device))
+          .onChange((value: number) => {
+            this.deviceManager.setLightAutomation(
+              device,
+              device.state.automation.enabled,
+              device.state.automation.illuminanceThresholdLux,
+              value
+            );
+          })
+        Text(device.state.automation.noPresenceDelaySeconds.toFixed(0) + ' 秒')
+          .fontSize(12)
+          .width(54)
+          .textAlign(TextAlign.End)
+      }
+      .width('100%')
+      .margin({ top: 10 })
     }
     .width('100%')
     .padding(16)
     .borderRadius(16)
     .backgroundColor($r('app.color.card_background'))
-    .margin({ top: 4 })
+  }
+
+  private canControl(device: LightDevice): boolean {
+    return this.deviceManager.isOnline() && device.online &&
+      !this.deviceManager.isDevicePending(device.id);
   }
 
   private getLightIconOpacity(isOn: boolean, brightness: number): number {
     if (!isOn) {
-      return 0.35;
+      return 0.15;
     }
-    return 0.4 + Math.max(0, Math.min(100, brightness)) * 0.006;
-  }
-
-  private getLightIconSize(brightness: number): number {
-    return 28 + Math.max(0, Math.min(100, brightness)) * 0.08;
+    return 0.15 + Math.max(0, Math.min(100, brightness)) * 0.0085;
   }
 }

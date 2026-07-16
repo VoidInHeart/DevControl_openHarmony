@@ -1,80 +1,309 @@
-import { DeviceInfo, DeviceState, DeviceType, AccessLogEntry, AlertEntry, SceneRule } from './DeviceModel';
+import { common } from '@kit.AbilityKit';
 import native from 'libentry.so';
+import {
+  AccessLogEntry,
+  AirConditionerDevice,
+  AlertEntry,
+  CommandPayload,
+  ConnectionState,
+  DeviceInfo,
+  DeviceType,
+  DoorLockDevice,
+  EnvironmentDevice,
+  EnvironmentHistoryPoint,
+  GatewaySession,
+  LightDevice,
+  parseDevice,
+  SceneExecutionDetail
+} from './DeviceModel';
+import { GatewayTransportListener } from '../service/GatewayTransport';
+import { DemoCertificateStore } from '../service/DemoCertificateStore';
+import { DeviceSnapshotStore } from '../service/DeviceSnapshotStore';
+import { GatewaySessionStore } from '../service/GatewaySessionStore';
+import { WssGatewayTransport } from '../service/WssGatewayTransport';
 
 @Observed
-export class DeviceManager {
+export class DeviceManager implements GatewayTransportListener {
   devices: DeviceInfo[] = [];
   accessLogs: AccessLogEntry[] = [];
   alerts: AlertEntry[] = [];
-  scenes: SceneRule[] = [];
-  tlsConnected: boolean = false;
-  private tickInterval: number = -1;
+  environmentHistory: EnvironmentHistoryPoint[] = [];
+  sceneResults: SceneExecutionDetail[] = [];
+  connectionState: string = ConnectionState.DISCONNECTED;
+  pairingRequired: boolean = true;
+  initialized: boolean = false;
+  pairingBusy: boolean = false;
+  gatewayAddress: string = '';
+  lastError: string = '';
+  lastErrorCode: string = '';
+  lastSyncAt: number = 0;
+  lastHeartbeatAt: number = 0;
+  pendingDeviceIds: string[] = [];
 
-  init(): void {
-    native.initDevices();
-    this.refreshDeviceList();
-    this.initScenes();
-  }
+  private transport: WssGatewayTransport = new WssGatewayTransport();
+  private sessionStore: GatewaySessionStore | null = null;
+  private snapshotStore: DeviceSnapshotStore | null = null;
+  private session: GatewaySession | null = null;
+  private pendingByMessage: Map<string, string> = new Map<string, string>();
+  private actionByMessage: Map<string, string> = new Map<string, string>();
+  private timeoutByMessage: Map<string, number> = new Map<string, number>();
 
-  refreshDeviceList(): void {
-    const jsonStr: string = native.listDevicesAsJson();
-    const parsed: object[] = JSON.parse(jsonStr) as object[];
-    const result: DeviceInfo[] = [];
-    for (let i = 0; i < parsed.length; i++) {
-      const raw: Record<string, Object> = parsed[i] as Record<string, Object>;
-      const device = new DeviceInfo();
-      device.id = raw['id'] as string;
-      device.name = raw['name'] as string;
-      device.type = raw['type'] as number;
-      device.brand = raw['brand'] as string;
-      const rawState = raw['state'] as Record<string, Object>;
-      if (rawState !== undefined && rawState !== null) {
-        device.state = this.parseDeviceState(rawState);
+  async initialize(context: common.UIAbilityContext): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+    this.initialized = true;
+    this.sessionStore = new GatewaySessionStore(context);
+    this.snapshotStore = new DeviceSnapshotStore(context);
+    try {
+      const caPath = await DemoCertificateStore.prepare(context);
+      this.transport.setCertificateAuthorityPath(caPath);
+      const cached = await this.snapshotStore.restore();
+      if (cached !== null) {
+        this.devices = cached.devices;
+        this.lastSyncAt = cached.lastSyncAt;
       }
-      result.push(device);
+      const restored = await this.sessionStore.restore();
+      if (restored === null) {
+        this.pairingRequired = true;
+        this.connectionState = ConnectionState.DISCONNECTED;
+        return;
+      }
+      this.session = restored;
+      this.gatewayAddress = restored.gatewayAddress;
+      this.pairingRequired = false;
+      this.transport.configure(restored);
+      await this.connectAndSync();
+    } catch (error) {
+      this.connectionState = ConnectionState.DISCONNECTED;
+      this.setErrorFromException(error);
+      if (this.session === null || this.lastErrorCode === 'AUTH_FAILED') {
+        this.pairingRequired = true;
+        this.setError('AUTH_FAILED', '安全会话恢复失败，请重新配对');
+      } else {
+        this.pairingRequired = false;
+      }
     }
-    this.devices = result;
   }
 
-  private parseDeviceState(raw: Record<string, Object>): DeviceState {
-    const state = new DeviceState();
-    state.online = raw['online'] as boolean;
-    state.isLocked = raw['isLocked'] as boolean;
-    state.isOn = raw['isOn'] as boolean;
-    state.brightness = raw['brightness'] as number;
-    state.temperature = raw['temperature'] as number;
-    state.humidity = raw['humidity'] as number;
-    state.acPower = raw['acPower'] as boolean;
-    state.acMode = raw['acMode'] as number;
-    state.targetTemp = raw['targetTemp'] as number;
-    state.targetHumidity = raw['targetHumidity'] as number;
-    if (raw['batteryLevel'] !== undefined && raw['batteryLevel'] !== null) {
-      state.batteryLevel = raw['batteryLevel'] as number;
+  async pairGateway(address: string, pairingCode: string): Promise<boolean> {
+    const normalized = address.trim().replace(/\/+$/, '');
+    if (normalized.indexOf('https://') !== 0) {
+      this.setError('INVALID_COMMAND', '网关地址必须以 https:// 开头');
+      return false;
     }
-    return state;
+    if (!/^\d{6}$/.test(pairingCode.trim())) {
+      this.setError('INVALID_COMMAND', '配对码必须是6位数字');
+      return false;
+    }
+    if (this.sessionStore === null) {
+      this.setError('INTERNAL_ERROR', '会话存储尚未初始化');
+      return false;
+    }
+    this.pairingBusy = true;
+    this.lastError = '';
+    this.connectionState = ConnectionState.AUTHENTICATING;
+    try {
+      const healthy = await this.transport.checkHealth(normalized);
+      if (!healthy) {
+        throw new Error('网关协议版本不兼容');
+      }
+      const clientId = 'harmony-' + native.generateMessageId();
+      const newSession = await this.transport.pair(normalized, pairingCode.trim(), clientId);
+      await this.sessionStore.save(newSession);
+      this.session = newSession;
+      this.gatewayAddress = newSession.gatewayAddress;
+      this.transport.configure(newSession);
+      this.pairingRequired = false;
+      await this.connectAndSync();
+      return true;
+    } catch (error) {
+      this.connectionState = ConnectionState.DISCONNECTED;
+      this.setErrorFromException(error);
+      return false;
+    } finally {
+      this.pairingBusy = false;
+    }
   }
 
-  sendCommand(deviceId: string, command: string, param: string): string {
-    const result: string = native.simulateDevice(deviceId, command, param);
-    this.addAccessLog(deviceId, command, result);
-    this.refreshDeviceList();
+  async reconnect(): Promise<void> {
+    if (this.session === null) {
+      this.pairingRequired = true;
+      return;
+    }
+    try {
+      await this.transport.reconnect();
+      await this.refreshAll();
+    } catch (error) {
+      this.setErrorFromException(error);
+    }
+  }
+
+  async forgetGateway(): Promise<void> {
+    await this.transport.close();
+    if (this.sessionStore !== null) {
+      await this.sessionStore.clear();
+    }
+    if (this.snapshotStore !== null) {
+      await this.snapshotStore.clear();
+    }
+    this.session = null;
+    this.devices = [];
+    this.accessLogs = [];
+    this.alerts = [];
+    this.environmentHistory = [];
+    this.sceneResults = [];
+    this.pendingDeviceIds = [];
+    this.pairingRequired = true;
+    this.gatewayAddress = '';
+    this.connectionState = ConnectionState.DISCONNECTED;
+    this.lastError = '';
+  }
+
+  async shutdown(): Promise<void> {
+    await this.transport.close();
+    this.clearAllCommandTimeouts();
+  }
+
+  onConnectionStateChanged(state: string): void {
+    this.connectionState = state;
+    if (state === ConnectionState.ONLINE) {
+      this.lastHeartbeatAt = Date.now();
+      this.refreshAll().catch((error: Error) => {
+        this.setErrorFromException(error);
+      });
+    }
+  }
+
+  onGatewayMessage(message: Record<string, Object>): void {
+    const type = message['type'] as string;
+    this.lastHeartbeatAt = Date.now();
+    if (type === 'heartbeat') {
+      return;
+    }
+    if (type === 'state.changed') {
+      const rawDevice = message['device'] as Record<string, Object>;
+      if (rawDevice !== undefined && rawDevice !== null) {
+        try {
+          this.applyDevice(parseDevice(rawDevice));
+        } catch (error) {
+          this.setError('INVALID_COMMAND', '网关设备状态字段校验失败');
+        }
+      }
+      return;
+    }
+    if (type === 'command.result') {
+      this.handleCommandResult(message);
+      return;
+    }
+    if (type === 'alert.raised') {
+      this.handleAlert(message);
+    }
+  }
+
+  onTransportError(code: string, message: string): void {
+    this.setError(code, message);
+  }
+
+  async refreshAll(): Promise<void> {
+    if (this.session === null) {
+      return;
+    }
+    try {
+      const snapshot = await this.transport.fetchDeviceSnapshot();
+      this.devices = snapshot;
+      this.lastSyncAt = Date.now();
+      if (this.snapshotStore !== null) {
+        try {
+          await this.snapshotStore.save(this.devices, this.lastSyncAt);
+        } catch (cacheError) {
+        }
+      }
+      this.lastError = '';
+      await this.refreshLogs();
+      await this.refreshEnvironmentHistory();
+    } catch (error) {
+      this.setErrorFromException(error);
+      if (this.lastErrorCode === 'AUTH_FAILED') {
+        this.pairingRequired = true;
+        this.connectionState = ConnectionState.DISCONNECTED;
+      }
+    }
+  }
+
+  async refreshLogs(): Promise<void> {
+    try {
+      const raw = await this.transport.fetchLogs(50);
+      const result: AccessLogEntry[] = [];
+      for (let index = 0; index < raw.length; index++) {
+        const item = new AccessLogEntry();
+        item.time = this.formatTime(raw[index]['timestamp'] as number);
+        item.deviceId = raw[index]['deviceId'] as string;
+        item.action = raw[index]['action'] as string;
+        item.result = raw[index]['result'] as string;
+        const errorCode = raw[index]['errorCode'];
+        item.errorCode = typeof errorCode === 'string' ? errorCode : '';
+        const messageIdSuffix = raw[index]['messageIdSuffix'];
+        item.messageIdSuffix =
+          typeof messageIdSuffix === 'string' ? messageIdSuffix : '';
+        result.push(item);
+      }
+      this.accessLogs = result;
+      const rawAlerts = await this.transport.fetchAlerts(20);
+      const alerts: AlertEntry[] = [];
+      for (let index = 0; index < rawAlerts.length; index++) {
+        const alert = new AlertEntry();
+        alert.time = this.formatTime(rawAlerts[index]['timestamp'] as number);
+        alert.deviceId = rawAlerts[index]['deviceId'] as string;
+        alert.level = rawAlerts[index]['severity'] as string;
+        alert.code = rawAlerts[index]['code'] as string;
+        alert.message = rawAlerts[index]['description'] as string;
+        alerts.push(alert);
+      }
+      this.alerts = alerts;
+    } catch (error) {
+    }
+  }
+
+  async refreshEnvironmentHistory(): Promise<void> {
+    try {
+      this.environmentHistory = await this.transport.fetchEnvironmentHistory(
+        Date.now() - 24 * 60 * 60 * 1000
+      );
+    } catch (error) {
+    }
+  }
+
+  getDevicesByType(type: string): DeviceInfo[] {
+    const result: DeviceInfo[] = [];
+    for (let index = 0; index < this.devices.length; index++) {
+      if (this.devices[index].type === type) {
+        result.push(this.devices[index]);
+      }
+    }
     return result;
   }
 
-  getDevicesByType(type: number): DeviceInfo[] {
-    const result: DeviceInfo[] = [];
-    for (let i = 0; i < this.devices.length; i++) {
-      if (this.devices[i].type === type) {
-        result.push(this.devices[i]);
-      }
-    }
-    return result;
+  getLights(): LightDevice[] {
+    return this.getDevicesByType(DeviceType.LIGHT) as LightDevice[];
+  }
+
+  getEnvironmentDevices(): EnvironmentDevice[] {
+    return this.getDevicesByType(DeviceType.ENVIRONMENT) as EnvironmentDevice[];
+  }
+
+  getAirConditioners(): AirConditionerDevice[] {
+    return this.getDevicesByType(DeviceType.AIR_CONDITIONER) as AirConditionerDevice[];
+  }
+
+  getDoorLocks(): DoorLockDevice[] {
+    return this.getDevicesByType(DeviceType.DOOR_LOCK) as DoorLockDevice[];
   }
 
   getDeviceById(id: string): DeviceInfo | null {
-    for (let i = 0; i < this.devices.length; i++) {
-      if (this.devices[i].id === id) {
-        return this.devices[i];
+    for (let index = 0; index < this.devices.length; index++) {
+      if (this.devices[index].id === id) {
+        return this.devices[index];
       }
     }
     return null;
@@ -82,8 +311,8 @@ export class DeviceManager {
 
   getOnlineCount(): number {
     let count = 0;
-    for (let i = 0; i < this.devices.length; i++) {
-      if (this.devices[i].state.online) {
+    for (let index = 0; index < this.devices.length; index++) {
+      if (this.devices[index].online) {
         count++;
       }
     }
@@ -94,142 +323,315 @@ export class DeviceManager {
     return this.devices.length - this.getOnlineCount();
   }
 
-  tick(): void {
-    native.tick();
-    this.refreshDeviceList();
+  isOnline(): boolean {
+    return this.connectionState === ConnectionState.ONLINE;
   }
 
-  startTick(intervalMs: number): void {
-    this.stopTick();
-    this.tickInterval = setInterval(() => {
-      this.tick();
-    }, intervalMs) as number;
+  isDevicePending(deviceId: string): boolean {
+    return this.pendingDeviceIds.indexOf(deviceId) >= 0;
   }
 
-  stopTick(): void {
-    if (this.tickInterval !== -1) {
-      clearInterval(this.tickInterval as number);
-      this.tickInterval = -1;
+  getConnectionLabel(): string {
+    if (this.connectionState === ConnectionState.CONNECTING) {
+      return '连接中';
+    }
+    if (this.connectionState === ConnectionState.AUTHENTICATING) {
+      return '认证中';
+    }
+    if (this.connectionState === ConnectionState.ONLINE) {
+      return '在线';
+    }
+    if (this.connectionState === ConnectionState.RECONNECTING) {
+      return '重连中';
+    }
+    if (this.connectionState === ConnectionState.CLOSED) {
+      return '已关闭';
+    }
+    return '离线';
+  }
+
+  async setLightPower(device: LightDevice, power: boolean): Promise<void> {
+    const payload = new CommandPayload();
+    payload.power = power;
+    await this.submit(device, 'setPower', payload);
+  }
+
+  async setLightBrightness(device: LightDevice, brightness: number): Promise<void> {
+    const payload = new CommandPayload();
+    payload.brightness = Math.round(brightness);
+    await this.submit(device, 'setBrightness', payload);
+  }
+
+  async setLightAutomation(
+    device: LightDevice,
+    enabled: boolean,
+    threshold: number,
+    delaySeconds: number
+  ): Promise<void> {
+    const payload = new CommandPayload();
+    payload.enabled = enabled;
+    payload.illuminanceThresholdLux = Math.round(threshold);
+    payload.noPresenceDelaySeconds = Math.round(delaySeconds);
+    await this.submit(device, 'setAutomationConfig', payload);
+  }
+
+  async setAcPower(device: AirConditionerDevice, power: boolean): Promise<void> {
+    const payload = new CommandPayload();
+    payload.power = power;
+    await this.submit(device, 'setPower', payload);
+  }
+
+  async setAcMode(device: AirConditionerDevice, mode: string): Promise<void> {
+    const payload = new CommandPayload();
+    payload.mode = mode;
+    await this.submit(device, 'setMode', payload);
+  }
+
+  async setAcTemperature(device: AirConditionerDevice, temperature: number): Promise<void> {
+    const payload = new CommandPayload();
+    payload.temperatureCelsius = Math.round(temperature);
+    await this.submit(device, 'setTemperature', payload);
+  }
+
+  async setAcBrand(device: AirConditionerDevice, brand: string): Promise<void> {
+    const payload = new CommandPayload();
+    payload.brand = brand;
+    await this.submit(device, 'setBrand', payload);
+  }
+
+  async setDoorLocked(device: DoorLockDevice, locked: boolean): Promise<void> {
+    await this.submit(device, locked ? 'lock' : 'unlock', new CommandPayload());
+  }
+
+  async setDoorAutoLock(
+    device: DoorLockDevice,
+    enabled: boolean,
+    delaySeconds: number
+  ): Promise<void> {
+    const payload = new CommandPayload();
+    payload.enabled = enabled;
+    payload.delaySeconds = Math.round(delaySeconds);
+    await this.submit(device, 'setAutoLockConfig', payload);
+  }
+
+  async executeAwayScene(): Promise<void> {
+    await this.submitRaw('scene-away', 'executeAway', null, new CommandPayload());
+  }
+
+  private async connectAndSync(): Promise<void> {
+    await this.transport.connect(this);
+    await this.refreshAll();
+  }
+
+  private async submit(
+    device: DeviceInfo,
+    action: string,
+    payload: CommandPayload
+  ): Promise<void> {
+    await this.submitRaw(device.id, action, device.stateVersion, payload);
+  }
+
+  private async submitRaw(
+    deviceId: string,
+    action: string,
+    expectedStateVersion: number | null,
+    payload: CommandPayload
+  ): Promise<void> {
+    if (!this.isOnline()) {
+      this.setError('DEVICE_OFFLINE', '网关离线，控制操作已禁用');
+      return;
+    }
+    if (this.isDevicePending(deviceId)) {
+      return;
+    }
+    this.pendingDeviceIds = [...this.pendingDeviceIds, deviceId];
+    try {
+      const messageId = await this.transport.sendCommand(
+        deviceId,
+        action,
+        expectedStateVersion,
+        payload
+      );
+      this.pendingByMessage.set(messageId, deviceId);
+      this.actionByMessage.set(messageId, action);
+      const timer = setTimeout(() => {
+        if (this.pendingByMessage.has(messageId)) {
+          this.finishPending(messageId);
+          this.setError('COMMAND_TIMEOUT', '命令响应超过5秒');
+        }
+      }, 5000) as number;
+      this.timeoutByMessage.set(messageId, timer);
+    } catch (error) {
+      this.removePendingDevice(deviceId);
+      this.setErrorFromException(error);
     }
   }
 
-  connectTLS(host: string, port: number): boolean {
-    this.tlsConnected = native.tlsConnect(host, port);
-    return this.tlsConnected;
-  }
-
-  sendTLS(data: string): string {
-    return native.tlsSend(data);
-  }
-
-  closeTLS(): void {
-    native.tlsClose();
-    this.tlsConnected = false;
-  }
-
-  encryptData(data: string, key: string): string {
-    return native.encryptData(data, key);
-  }
-
-  decryptData(data: string, key: string): string {
-    return native.decryptData(data, key);
-  }
-
-  signData(data: string, key: string): string {
-    return native.hmacSign(data, key);
-  }
-
-  addAccessLog(deviceId: string, action: string, result: string): void {
-    const entry = new AccessLogEntry();
-    const now = new Date();
-    entry.time = now.getHours().toString().padStart(2, '0') + ':' +
-      now.getMinutes().toString().padStart(2, '0') + ':' +
-      now.getSeconds().toString().padStart(2, '0');
-    entry.deviceId = deviceId;
-    entry.action = action;
-    entry.result = result.indexOf('"ok"') >= 0 ? 'success' : 'failed';
-    this.accessLogs = [entry, ...this.accessLogs].slice(0, 50);
-  }
-
-  addAlert(deviceId: string, level: string, message: string): void {
-    const entry = new AlertEntry();
-    const now = new Date();
-    entry.time = now.getHours().toString().padStart(2, '0') + ':' +
-      now.getMinutes().toString().padStart(2, '0') + ':' +
-      now.getSeconds().toString().padStart(2, '0');
-    entry.deviceId = deviceId;
-    entry.level = level;
-    entry.message = message;
-    this.alerts = [entry, ...this.alerts].slice(0, 20);
-  }
-
-  private initScenes(): void {
-    const homeScene = new SceneRule();
-    homeScene.id = 'scene_home';
-    homeScene.name = 'Home';
-    homeScene.enabled = true;
-    homeScene.actions = ['light_001:turnOn', 'light_002:turnOn', 'ac_001:acPowerOn'];
-
-    const awayScene = new SceneRule();
-    awayScene.id = 'scene_away';
-    awayScene.name = 'Away';
-    awayScene.enabled = true;
-    awayScene.actions = [
-      'light_001:turnOff',
-      'light_002:turnOff',
-      'light_003:turnOff',
-      'ac_001:acPowerOff',
-      'ac_002:acPowerOff',
-      'door_001:lock',
-      'door_002:lock'
-    ];
-
-    const sleepScene = new SceneRule();
-    sleepScene.id = 'scene_sleep';
-    sleepScene.name = 'Sleep';
-    sleepScene.enabled = true;
-    sleepScene.actions = [
-      'light_001:turnOff',
-      'light_002:turnOff',
-      'light_003:turnOff',
-      'door_001:lock',
-      'door_002:lock',
-      'ac_001:acPowerOn'
-    ];
-
-    this.scenes = [homeScene, awayScene, sleepScene];
-  }
-
-  executeScene(sceneId: string): string {
-    for (let i = 0; i < this.scenes.length; i++) {
-      if (this.scenes[i].id === sceneId && this.scenes[i].enabled) {
-        const actions = this.scenes[i].actions;
-        let successCount = 0;
-        for (let j = 0; j < actions.length; j++) {
-          const parts = actions[j].split(':');
-          if (parts.length >= 2) {
-            const result = this.sendCommand(parts[0], parts[1], '');
-            if (result.indexOf('"result":"ok"') >= 0) {
-              successCount++;
-            }
-          }
-        }
-        const failedCount = actions.length - successCount;
-        if (failedCount === 0) {
-          return this.scenes[i].name + ' scene applied';
-        }
-        return this.scenes[i].name + ' scene: ' + successCount.toString() + ' succeeded, ' +
-          failedCount.toString() + ' failed';
+  private applyDevice(incoming: DeviceInfo): void {
+    const result: DeviceInfo[] = [];
+    let found = false;
+    for (let index = 0; index < this.devices.length; index++) {
+      const current = this.devices[index];
+      if (current.id === incoming.id) {
+        found = true;
+        result.push(incoming.stateVersion > current.stateVersion ? incoming : current);
+      } else {
+        result.push(current);
       }
     }
-    return 'Scene is unavailable';
+    if (!found) {
+      result.push(incoming);
+    }
+    this.devices = result;
+    this.lastSyncAt = Date.now();
   }
 
-  clearAlerts(): void {
-    this.alerts = [];
+  private handleCommandResult(message: Record<string, Object>): void {
+    const messageId = message['messageId'] as string;
+    const deviceId = message['deviceId'] as string;
+    const action = message['action'] as string;
+    const success = message['success'] as boolean;
+    this.finishPending(messageId);
+    if (deviceId === 'scene-away') {
+      this.sceneResults = this.parseSceneResults(message['details']);
+    }
+    const log = new AccessLogEntry();
+    log.time = this.formatTime(Date.now());
+    log.deviceId = deviceId;
+    log.action = action;
+    log.result = success ? 'success' : 'failed';
+    if (!success) {
+      const error = message['error'] as Record<string, Object>;
+      if (error !== undefined && error !== null) {
+        log.errorCode = error['code'] as string;
+        this.setError(log.errorCode, this.errorMessage(log.errorCode, error['message'] as string));
+        if (log.errorCode === 'STATE_CONFLICT') {
+          this.refreshAll().catch((refreshError: Error) => {
+            this.setErrorFromException(refreshError);
+          });
+        }
+        if (log.errorCode === 'AUTH_FAILED') {
+          this.pairingRequired = true;
+        }
+      }
+    } else {
+      this.lastError = '';
+      this.lastErrorCode = '';
+    }
+    this.accessLogs = [log, ...this.accessLogs].slice(0, 50);
+    if (deviceId === 'scene-away' && success) {
+      this.refreshAll().catch((error: Error) => {
+        this.setErrorFromException(error);
+      });
+    }
   }
 
-  clearAccessLogs(): void {
-    this.accessLogs = [];
+  private handleAlert(message: Record<string, Object>): void {
+    const alert = new AlertEntry();
+    alert.time = this.formatTime(message['timestamp'] as number);
+    alert.deviceId = message['deviceId'] as string;
+    alert.level = message['severity'] as string;
+    alert.code = message['code'] as string;
+    alert.message = message['description'] as string;
+    this.alerts = [alert, ...this.alerts].slice(0, 20);
+  }
+
+  private parseSceneResults(value: Object): SceneExecutionDetail[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const raw = value as object[];
+    const result: SceneExecutionDetail[] = [];
+    for (let index = 0; index < raw.length; index++) {
+      const item = raw[index] as Record<string, Object>;
+      if (
+        typeof item['deviceId'] !== 'string' ||
+        typeof item['success'] !== 'boolean'
+      ) {
+        continue;
+      }
+      const detail = new SceneExecutionDetail();
+      detail.deviceId = item['deviceId'] as string;
+      detail.success = item['success'] as boolean;
+      const errorCode = item['errorCode'];
+      detail.errorCode = typeof errorCode === 'string' ? errorCode : '';
+      result.push(detail);
+    }
+    return result;
+  }
+
+  private finishPending(messageId: string): void {
+    const timer = this.timeoutByMessage.get(messageId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.timeoutByMessage.delete(messageId);
+    }
+    const deviceId = this.pendingByMessage.get(messageId);
+    if (deviceId !== undefined) {
+      this.removePendingDevice(deviceId);
+    }
+    this.pendingByMessage.delete(messageId);
+    this.actionByMessage.delete(messageId);
+  }
+
+  private removePendingDevice(deviceId: string): void {
+    this.pendingDeviceIds = this.pendingDeviceIds.filter((value: string) => value !== deviceId);
+  }
+
+  private clearAllCommandTimeouts(): void {
+    this.timeoutByMessage.forEach((timer: number) => clearTimeout(timer));
+    this.timeoutByMessage.clear();
+    this.pendingByMessage.clear();
+    this.actionByMessage.clear();
+    this.pendingDeviceIds = [];
+  }
+
+  private setErrorFromException(error: Object): void {
+    const text = error instanceof Error ? error.message : JSON.stringify(error);
+    const separator = text.indexOf(':');
+    if (separator > 0) {
+      const code = text.substring(0, separator);
+      const message = text.substring(separator + 1);
+      this.setError(code, this.errorMessage(code, message));
+    } else {
+      this.setError('INTERNAL_ERROR', text);
+    }
+  }
+
+  private setError(code: string, message: string): void {
+    this.lastErrorCode = code;
+    this.lastError = native.redactDiagnostic(message);
+  }
+
+  private errorMessage(code: string, fallback: string): string {
+    if (code === 'AUTH_FAILED') {
+      return '会话已失效，请重新配对';
+    }
+    if (code === 'DEVICE_OFFLINE') {
+      return '目标设备离线';
+    }
+    if (code === 'INVALID_COMMAND') {
+      return '控制参数无效';
+    }
+    if (code === 'COMMAND_TIMEOUT') {
+      return '命令执行超时';
+    }
+    if (code === 'STATE_CONFLICT') {
+      return '设备状态已更新，已重新同步';
+    }
+    if (code === 'REPLAY_DETECTED') {
+      return '命令安全校验失败';
+    }
+    if (code === 'RATE_LIMITED') {
+      return '操作过于频繁，请稍后再试';
+    }
+    return fallback.length > 0 ? fallback : '网关内部错误';
+  }
+
+  private formatTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    return date.getHours().toString().padStart(2, '0') + ':' +
+      date.getMinutes().toString().padStart(2, '0') + ':' +
+      date.getSeconds().toString().padStart(2, '0');
   }
 }

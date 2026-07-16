@@ -1,13 +1,11 @@
-export const simulateDevice: (deviceId: string, command: string, param: string) => string;
-export const listDevicesAsJson: () => string;
-export const getDeviceStateAsJson: (deviceId: string) => string;
-export const encryptData: (data: string, key: string) => string;
-export const decryptData: (data: string, key: string) => string;
-export const hmacSign: (data: string, key: string) => string;
-export const parseDeviceCommand: (raw: string) => string;
-export const buildCommand: (deviceId: string, action: string, param: string) => string;
-export const tlsConnect: (host: string, port: number) => boolean;
-export const tlsSend: (data: string) => string;
-export const tlsClose: () => void;
-export const tick: () => void;
-export const initDevices: () => boolean;
+export const generateMessageId: () => string;
+export const generateNonce: () => string;
+export const sealCommand: (keyBase64Url: string, payloadJson: string, aadJson: string) => string;
+export const openForTest: (
+  keyBase64Url: string,
+  nonceBase64Url: string,
+  ciphertextBase64Url: string,
+  authTagBase64Url: string,
+  aadJson: string
+) => string;
+export const redactDiagnostic: (text: string) => string;

@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devcontrol.local/schema/protocol-v1.json",
+  "title": "DevControl Protocol 1.0",
+  "type": "object",
+  "$defs": {
+    "baseDevice": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "roomId",
+        "type",
+        "online",
+        "stateVersion",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 3 },
+        "name": { "type": "string", "minLength": 1 },
+        "roomId": { "type": "string", "minLength": 1 },
+        "type": {
+          "enum": ["light", "environment", "airConditioner", "doorLock"]
+        },
+        "online": { "type": "boolean" },
+        "stateVersion": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "lightDevice": {
+      "allOf": [
+        { "$ref": "#/$defs/baseDevice" },
+        {
+          "type": "object",
+          "required": ["power", "brightness", "automation"],
+          "properties": {
+            "type": { "const": "light" },
+            "power": { "type": "boolean" },
+            "brightness": { "type": "integer", "minimum": 0, "maximum": 100 },
+            "lastNonZeroBrightness": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "automation": {
+              "type": "object",
+              "required": [
+                "enabled",
+                "illuminanceThresholdLux",
+                "noPresenceDelaySeconds"
+              ],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "illuminanceThresholdLux": {
+                  "type": "integer",
+                  "minimum": 10,
+                  "maximum": 500
+                },
+                "noPresenceDelaySeconds": {
+                  "type": "integer",
+                  "minimum": 5,
+                  "maximum": 600
+                },
+                "manualOverrideUntil": {
+                  "type": ["integer", "null"]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "environmentDevice": {
+      "allOf": [
+        { "$ref": "#/$defs/baseDevice" },
+        {
+          "type": "object",
+          "required": [
+            "temperatureCelsius",
+            "humidityPercent",
+            "illuminanceLux",
+            "presence",
+            "dataValid"
+          ],
+          "properties": {
+            "type": { "const": "environment" },
+            "temperatureCelsius": { "type": "number" },
+            "humidityPercent": { "type": "number" },
+            "illuminanceLux": { "type": "number", "minimum": 0 },
+            "presence": { "type": "boolean" },
+            "dataValid": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "airConditionerDevice": {
+      "allOf": [
+        { "$ref": "#/$defs/baseDevice" },
+        {
+          "type": "object",
+          "required": [
+            "brand",
+            "power",
+            "mode",
+            "targetTemperatureCelsius",
+            "running"
+          ],
+          "properties": {
+            "type": { "const": "airConditioner" },
+            "brand": {
+              "enum": ["generic", "haierSim", "greeSim", "mideaSim"]
+            },
+            "power": { "type": "boolean" },
+            "mode": { "enum": ["auto", "cool", "heat", "dry", "fan"] },
+            "targetTemperatureCelsius": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 30
+            },
+            "running": { "type": "boolean" },
+            "lastAdapterFrame": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "doorLockDevice": {
+      "allOf": [
+        { "$ref": "#/$defs/baseDevice" },
+        {
+          "type": "object",
+          "required": [
+            "locked",
+            "jammed",
+            "batteryPercent",
+            "autoLockEnabled",
+            "autoLockDelaySeconds"
+          ],
+          "properties": {
+            "type": { "const": "doorLock" },
+            "locked": { "type": "boolean" },
+            "jammed": { "type": "boolean" },
+            "batteryPercent": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "autoLockEnabled": { "type": "boolean" },
+            "autoLockDelaySeconds": {
+              "type": "integer",
+              "minimum": 5,
+              "maximum": 60
+            },
+            "autoLockAt": { "type": ["integer", "null"] }
+          }
+        }
+      ]
+    },
+    "device": {
+      "oneOf": [
+        { "$ref": "#/$defs/lightDevice" },
+        { "$ref": "#/$defs/environmentDevice" },
+        { "$ref": "#/$defs/airConditionerDevice" },
+        { "$ref": "#/$defs/doorLockDevice" }
+      ]
+    },
+    "secureCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "messageId",
+        "deviceId",
+        "timestamp",
+        "type",
+        "action",
+        "expectedStateVersion",
+        "nonce",
+        "ciphertext",
+        "authTag"
+      ],
+      "properties": {
+        "protocolVersion": { "const": "1.0" },
+        "messageId": { "type": "string", "minLength": 16 },
+        "deviceId": { "type": "string", "minLength": 3 },
+        "timestamp": { "type": "integer" },
+        "type": { "const": "command.request" },
+        "action": { "type": "string", "minLength": 1 },
+        "expectedStateVersion": { "type": ["integer", "null"] },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{16}$"
+        },
+        "ciphertext": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "authTag": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{22}$"
+        }
+      }
+    },
+    "pairRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "pairingCode", "clientId"],
+      "properties": {
+        "protocolVersion": { "const": "1.0" },
+        "pairingCode": { "type": "string", "pattern": "^\\d{6}$" },
+        "clientId": { "type": "string", "minLength": 8, "maxLength": 128 }
+      }
+    },
+    "pairResponse": {
+      "type": "object",
+      "required": [
+        "protocolVersion",
+        "clientId",
+        "credential",
+        "dataKey",
+        "issuedAt"
+      ],
+      "properties": {
+        "protocolVersion": { "const": "1.0" },
+        "clientId": { "type": "string" },
+        "credential": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "dataKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "issuedAt": { "type": "integer" }
+      }
+    },
+    "commandResult": {
+      "type": "object",
+      "required": [
+        "protocolVersion",
+        "type",
+        "timestamp",
+        "messageId",
+        "success",
+        "error"
+      ],
+      "properties": {
+        "protocolVersion": { "const": "1.0" },
+        "type": { "const": "command.result" },
+        "timestamp": { "type": "integer" },
+        "messageId": { "type": "string" },
+        "deviceId": { "type": "string" },
+        "action": { "type": "string" },
+        "success": { "type": "boolean" },
+        "stateVersion": { "type": "integer", "minimum": 0 },
+        "error": {
+          "type": ["object", "null"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "retryAfterSeconds": { "type": ["integer", "null"] }
+          }
+        },
+        "details": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "required": ["deviceId", "success", "errorCode"],
+            "properties": {
+              "deviceId": { "type": "string" },
+              "success": { "type": "boolean" },
+              "errorCode": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "stateChanged": {
+      "type": "object",
+      "required": [
+        "protocolVersion",
+        "type",
+        "timestamp",
+        "deviceId",
+        "stateVersion",
+        "device"
+      ],
+      "properties": {
+        "protocolVersion": { "const": "1.0" },
+        "type": { "const": "state.changed" },
+        "timestamp": { "type": "integer" },
+        "deviceId": { "type": "string" },
+        "stateVersion": { "type": "integer", "minimum": 0 },
+        "device": { "$ref": "#/$defs/device" }
+      }
+    },
+    "heartbeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "type", "timestamp"],
+      "properties": {
+        "protocolVersion": { "const": "1.0" },
+        "type": { "const": "heartbeat" },
+        "timestamp": { "type": "integer" }
+      }
+    },
+    "alertRaised": {
+      "type": "object",
+      "required": [
+        "protocolVersion",
+        "type",
+        "timestamp",
+        "deviceId",
+        "severity",
+        "code",
+        "description"
+      ],
+      "properties": {
+        "protocolVersion": { "const": "1.0" },
+        "type": { "const": "alert.raised" },
+        "timestamp": { "type": "integer" },
+        "deviceId": { "type": "string" },
+        "severity": { "enum": ["info", "warning", "critical"] },
+        "code": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "deviceSnapshotResponse": {
+      "type": "object",
+      "required": ["protocolVersion", "serverTime", "devices"],
+      "properties": {
+        "protocolVersion": { "const": "1.0" },
+        "serverTime": { "type": "integer" },
+        "devices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/device" }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/device" },
+    { "$ref": "#/$defs/secureCommand" },
+    { "$ref": "#/$defs/pairRequest" },
+    { "$ref": "#/$defs/pairResponse" },
+    { "$ref": "#/$defs/commandResult" },
+    { "$ref": "#/$defs/stateChanged" },
+    { "$ref": "#/$defs/heartbeat" },
+    { "$ref": "#/$defs/alertRaised" },
+    { "$ref": "#/$defs/deviceSnapshotResponse" }
+  ]
+}

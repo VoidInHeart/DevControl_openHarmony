@@ -1,9 +1,11 @@
+import { common } from '@kit.AbilityKit';
 import { DeviceManager } from '../model/DeviceManager';
-import { Constants } from '../common/Constants';
 import { ControlCenterTab } from '../components/ControlCenterTab';
 import { LightingTab } from '../components/LightingTab';
 import { TemperatureTab } from '../components/TemperatureTab';
 import { DoorLockTab } from '../components/DoorLockTab';
+import { PairingPage } from '../components/PairingPage';
+import { SettingsTab } from '../components/SettingsTab';
 
 @Entry
 @Component
@@ -12,43 +14,58 @@ struct Index {
   @State currentTab: number = 0;
 
   aboutToAppear(): void {
-    this.deviceManager.init();
-    this.deviceManager.startTick(Constants.TICK_INTERVAL_MS);
+    const context = getContext(this) as common.UIAbilityContext;
+    this.deviceManager.initialize(context);
   }
 
-  aboutToDisappear(): void {
-    this.deviceManager.stopTick();
+  onPageShow(): void {
+    if (
+      this.deviceManager.initialized &&
+      !this.deviceManager.pairingRequired &&
+      !this.deviceManager.isOnline()
+    ) {
+      this.deviceManager.reconnect();
+    }
   }
 
   build() {
     Column() {
-      Tabs({ index: this.currentTab }) {
-        TabContent() {
-          ControlCenterTab()
-        }
-        .tabBar('Control')
+      if (this.deviceManager.pairingRequired) {
+        PairingPage()
+      } else {
+        Tabs({ index: this.currentTab }) {
+          TabContent() {
+            ControlCenterTab()
+          }
+          .tabBar('总控')
 
-        TabContent() {
-          LightingTab()
-        }
-        .tabBar('Lighting')
+          TabContent() {
+            LightingTab()
+          }
+          .tabBar('照明')
 
-        TabContent() {
-          TemperatureTab()
-        }
-        .tabBar('Climate')
+          TabContent() {
+            TemperatureTab()
+          }
+          .tabBar('环境')
 
-        TabContent() {
-          DoorLockTab()
+          TabContent() {
+            DoorLockTab()
+          }
+          .tabBar('门锁')
+
+          TabContent() {
+            SettingsTab()
+          }
+          .tabBar('设置')
         }
-        .tabBar('Door')
+        .width('100%')
+        .layoutWeight(1)
+        .barMode(BarMode.Fixed)
+        .onChange((index: number) => {
+          this.currentTab = index;
+        })
       }
-      .width('100%')
-      .layoutWeight(1)
-      .barMode(BarMode.Fixed)
-      .onChange((index: number) => {
-        this.currentTab = index;
-      })
     }
     .width('100%')
     .height('100%')

@@ -1,14 +1,22 @@
-import { DeviceInfo, DeviceType } from '../model/DeviceModel';
+import {
+  AirConditionerDevice,
+  DeviceInfo,
+  DeviceType,
+  DoorLockDevice,
+  EnvironmentDevice,
+  LightDevice,
+  SceneExecutionDetail
+} from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
 
 @Component
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
-  @State sceneFeedback: string = '';
 
   build() {
     Scroll() {
       Column() {
+        this.ConnectionSection()
         this.StatsSection()
         this.SceneSection()
         this.DeviceListSection()
@@ -22,98 +30,122 @@ export struct ControlCenterTab {
   }
 
   @Builder
+  ConnectionSection() {
+    Column() {
+      Row() {
+        Text(this.deviceManager.isOnline() ? '●' : '●')
+          .fontSize(12)
+          .fontColor(this.deviceManager.isOnline() ?
+            $r('app.color.status_online') : $r('app.color.status_offline'))
+        Text('网关' + this.deviceManager.getConnectionLabel())
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .margin({ left: 8 })
+        Blank()
+        if (this.deviceManager.connectionState === 'reconnecting') {
+          Text('自动重连中')
+            .fontSize(12)
+            .fontColor($r('app.color.status_warning'))
+        }
+      }
+      .width('100%')
+
+      if (!this.deviceManager.isOnline()) {
+        Text('当前展示最后一次同步快照，所有控制操作已禁用。')
+          .fontSize(12)
+          .fontColor($r('app.color.status_warning'))
+          .width('100%')
+          .margin({ top: 8 })
+      }
+      if (this.deviceManager.lastError.length > 0) {
+        Text(this.deviceManager.lastErrorCode + ' · ' + this.deviceManager.lastError)
+          .fontSize(12)
+          .fontColor($r('app.color.status_alert'))
+          .width('100%')
+          .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(12)
+    .backgroundColor($r('app.color.card_background'))
+    .margin({ bottom: 16 })
+  }
+
+  @Builder
   StatsSection() {
     Row() {
-      Column() {
-        Text(this.deviceManager.getOnlineCount().toString())
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.status_online'))
-        Text('Online')
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .margin({ top: 4 })
-      }
-      .layoutWeight(1)
-      .padding(16)
-      .borderRadius(12)
-      .backgroundColor($r('app.color.card_background'))
-      .alignItems(HorizontalAlign.Center)
-
-      Column() {
-        Text(this.deviceManager.getOfflineCount().toString())
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.status_offline'))
-        Text('Offline')
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .margin({ top: 4 })
-      }
-      .layoutWeight(1)
-      .padding(16)
-      .borderRadius(12)
-      .backgroundColor($r('app.color.card_background'))
-      .alignItems(HorizontalAlign.Center)
-      .margin({ left: 8 })
-
-      Column() {
-        Text(this.deviceManager.alerts.length.toString())
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.status_alert'))
-        Text('Alerts')
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .margin({ top: 4 })
-      }
-      .layoutWeight(1)
-      .padding(16)
-      .borderRadius(12)
-      .backgroundColor($r('app.color.card_background'))
-      .alignItems(HorizontalAlign.Center)
-      .margin({ left: 8 })
+      this.StatCard(this.deviceManager.getOnlineCount().toString(), '在线设备',
+        $r('app.color.status_online'))
+      this.StatCard(this.deviceManager.getOfflineCount().toString(), '离线设备',
+        $r('app.color.status_offline'))
+      this.StatCard(this.deviceManager.alerts.length.toString(), '安全告警',
+        $r('app.color.status_alert'))
     }
     .width('100%')
     .margin({ bottom: 16 })
   }
 
   @Builder
+  StatCard(value: string, label: string, color: Resource) {
+    Column() {
+      Text(value)
+        .fontSize(26)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(color)
+      Text(label)
+        .fontSize(11)
+        .fontColor($r('app.color.text_secondary'))
+        .margin({ top: 4 })
+    }
+    .layoutWeight(1)
+    .padding({ top: 14, bottom: 14 })
+    .borderRadius(12)
+    .backgroundColor($r('app.color.card_background'))
+    .alignItems(HorizontalAlign.Center)
+    .margin({ left: 3, right: 3 })
+  }
+
+  @Builder
   SceneSection() {
     Column() {
-      Text('Quick Scenes')
+      Text('快捷场景')
         .fontSize(18)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
         .width('100%')
-        .margin({ bottom: 12 })
-
-      Row() {
-        ForEach(this.deviceManager.scenes, (scene: Record<string, string>) => {
-          Button(scene['name'])
-            .fontSize(14)
-            .fontColor(Color.White)
-            .backgroundColor($r('app.color.primary'))
-            .borderRadius(20)
-            .padding({ left: 20, right: 20, top: 8, bottom: 8 })
-            .onClick(() => {
-              const feedback = this.deviceManager.executeScene(scene['id']);
-              setTimeout(() => {
-                this.sceneFeedback = feedback;
-              }, 0);
-            })
-        }, (scene: Record<string, string>) => scene['id'])
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.SpaceAround)
-
-      if (this.sceneFeedback.length > 0) {
-        Text(this.sceneFeedback)
-          .fontSize(13)
-          .fontColor($r('app.color.status_online'))
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .margin({ top: 12 })
+      Text('离家模式将关闭灯光和空调，并锁定入户门锁。')
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+        .margin({ top: 6, bottom: 12 })
+      Button(this.deviceManager.isDevicePending('scene-away') ? '正在执行离家模式…' : '执行离家模式')
+        .width('100%')
+        .enabled(this.deviceManager.isOnline() && !this.deviceManager.isDevicePending('scene-away'))
+        .opacity(this.deviceManager.isOnline() ? 1 : 0.45)
+        .onClick(() => {
+          this.deviceManager.executeAwayScene();
+        })
+      if (this.deviceManager.sceneResults.length > 0) {
+        Column() {
+          ForEach(this.deviceManager.sceneResults, (item: SceneExecutionDetail) => {
+            Row() {
+              Text(this.sceneDeviceName(item.deviceId))
+                .fontSize(12)
+                .fontColor($r('app.color.text_secondary'))
+                .layoutWeight(1)
+              Text(item.success ? '成功' : '失败 ' + item.errorCode)
+                .fontSize(12)
+                .fontColor(item.success ?
+                  $r('app.color.status_online') : $r('app.color.status_alert'))
+            }
+            .width('100%')
+            .margin({ top: 8 })
+          }, (item: SceneExecutionDetail) => item.deviceId)
+        }
+        .width('100%')
+        .margin({ top: 8 })
       }
     }
     .width('100%')
@@ -126,85 +158,100 @@ export struct ControlCenterTab {
   @Builder
   DeviceListSection() {
     Column() {
-      Text('All Devices')
+      Text('全部设备')
         .fontSize(18)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
         .width('100%')
         .margin({ bottom: 12 })
 
-      ForEach(this.deviceManager.devices, (device: DeviceInfo) => {
-        Row() {
-          Text(this.getDeviceIcon(device))
-            .fontSize(24)
-          Column() {
-            Text(device.name)
-              .fontSize(15)
-              .fontColor($r('app.color.text_primary'))
-            Text(device.state.online ? 'Online' : 'Offline')
-              .fontSize(12)
-              .fontColor(device.state.online ? $r('app.color.status_online') : $r('app.color.status_offline'))
-              .margin({ top: 2 })
+      if (this.deviceManager.devices.length === 0) {
+        Text('正在等待网关设备快照…')
+          .fontSize(14)
+          .fontColor($r('app.color.text_secondary'))
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding(24)
+      } else {
+        ForEach(this.deviceManager.devices, (device: DeviceInfo) => {
+          Row() {
+            Text(this.getDeviceIcon(device))
+              .fontSize(26)
+            Column() {
+              Text(device.name)
+                .fontSize(15)
+                .fontColor($r('app.color.text_primary'))
+              Text(device.online ? '在线' : '离线')
+                .fontSize(12)
+                .fontColor(device.online ?
+                  $r('app.color.status_online') : $r('app.color.status_offline'))
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            Column() {
+              Text(this.getDeviceStatusText(device))
+                .fontSize(13)
+                .fontColor($r('app.color.text_secondary'))
+              if (this.deviceManager.isDevicePending(device.id)) {
+                Text('处理中')
+                  .fontSize(11)
+                  .fontColor($r('app.color.status_warning'))
+                  .margin({ top: 2 })
+              }
+            }
+            .alignItems(HorizontalAlign.End)
           }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-          .margin({ left: 12 })
-          Text(this.getDeviceStatusText(device))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
-        }
-        .width('100%')
-        .padding(12)
-        .borderRadius(8)
-        .backgroundColor($r('app.color.card_background'))
-        .margin({ bottom: 6 })
-        .alignItems(VerticalAlign.Center)
-      }, (device: DeviceInfo) => this.getDeviceRenderKey(device))
+          .width('100%')
+          .padding(12)
+          .borderRadius(8)
+          .backgroundColor($r('app.color.card_background'))
+          .margin({ bottom: 6 })
+          .alignItems(VerticalAlign.Center)
+        }, (device: DeviceInfo) => device.id + ':' + device.stateVersion.toString())
+      }
     }
     .width('100%')
   }
 
   private getDeviceIcon(device: DeviceInfo): string {
-    if (device.type === DeviceType.DOOR) {
-      return device.state.isLocked ? '🔒' : '🔓';
+    if (device.type === DeviceType.DOOR_LOCK) {
+      return (device as DoorLockDevice).state.locked ? '🔒' : '🔓';
     }
     if (device.type === DeviceType.LIGHT) {
-      return device.state.isOn ? '💡' : '⚪';
+      return (device as LightDevice).state.power ? '💡' : '○';
     }
-    if (device.type === DeviceType.SENSOR) {
+    if (device.type === DeviceType.ENVIRONMENT) {
       return '🌡';
     }
-    if (device.type === DeviceType.AC) {
-      return device.state.acPower ? '❄' : '⏻';
+    if (device.type === DeviceType.AIR_CONDITIONER) {
+      return (device as AirConditionerDevice).state.power ? '❄' : '⏻';
     }
-    return '📦';
+    return '□';
   }
 
   private getDeviceStatusText(device: DeviceInfo): string {
-    if (device.type === DeviceType.DOOR) {
-      return device.state.isLocked ? 'Locked' : 'Unlocked';
+    if (device.type === DeviceType.DOOR_LOCK) {
+      const door = device as DoorLockDevice;
+      return door.state.jammed ? '卡滞' : (door.state.locked ? '已锁定' : '已解锁');
     }
     if (device.type === DeviceType.LIGHT) {
-      return device.state.isOn ? 'On ' + device.state.brightness.toFixed(0) + '%' : 'Off';
+      const light = device as LightDevice;
+      return light.state.power ? '开启 ' + light.state.brightness.toFixed(0) + '%' : '关闭';
     }
-    if (device.type === DeviceType.SENSOR) {
-      return device.state.temperature.toFixed(1) + '°C / ' + device.state.humidity.toFixed(0) + '%';
+    if (device.type === DeviceType.ENVIRONMENT) {
+      const environment = device as EnvironmentDevice;
+      return environment.state.temperatureCelsius.toFixed(1) + '°C / ' +
+        environment.state.humidityPercent.toFixed(0) + '%';
     }
-    if (device.type === DeviceType.AC) {
-      return device.state.acPower ? 'On ' + device.state.targetTemp.toFixed(0) + '°C' : 'Off';
-    }
-    return '';
+    const ac = device as AirConditionerDevice;
+    return ac.state.power ? ac.state.mode + ' · ' +
+      ac.state.targetTemperatureCelsius.toFixed(0) + '°C' : '关闭';
   }
 
-  private getDeviceRenderKey(device: DeviceInfo): string {
-    return device.id + ':' +
-      (device.state.online ? '1' : '0') + ':' +
-      (device.state.isLocked ? '1' : '0') + ':' +
-      (device.state.isOn ? '1' : '0') + ':' +
-      device.state.brightness.toFixed(0) + ':' +
-      device.state.temperature.toFixed(1) + ':' +
-      device.state.humidity.toFixed(0) + ':' +
-      (device.state.acPower ? '1' : '0') + ':' +
-      device.state.targetTemp.toFixed(0);
+  private sceneDeviceName(deviceId: string): string {
+    const device = this.deviceManager.getDeviceById(deviceId);
+    return device === null ? deviceId : device.name;
   }
 }

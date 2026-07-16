@@ -1,0 +1,326 @@
+from __future__ import annotations
+
+import asyncio
+import time
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from fastapi.testclient import TestClient
+
+from devcontrol_gateway.app import create_app
+from devcontrol_gateway.config import GatewayConfig
+from devcontrol_gateway.errors import AUTH_FAILED, RATE_LIMITED
+from devcontrol_gateway.models import PROTOCOL_VERSION, SecureCommandEnvelope
+from devcontrol_gateway.security import (
+    ClientSession,
+    SessionRegistry,
+    encrypt_payload,
+    now_ms,
+)
+from devcontrol_gateway.service import GatewayService
+
+
+def make_config(tmp_path: Path) -> GatewayConfig:
+    return GatewayConfig(
+        database=tmp_path / "gateway.db",
+        pairing_code="123456",
+        admin_token="test-admin-token",
+        enable_background_tasks=False,
+    )
+
+
+def pair(service: GatewayService) -> tuple[str, ClientSession]:
+    response = service.sessions.pair(
+        "127.0.0.1", f"test-client-{uuid4()}", "123456"
+    )
+    session = service.sessions.authenticate(response.credential)
+    return response.credential, session
+
+
+def command(
+    session: ClientSession,
+    *,
+    device_id: str,
+    action: str,
+    expected_version: int | None,
+    payload: dict[str, object],
+    message_id: str | None = None,
+    timestamp: int | None = None,
+) -> SecureCommandEnvelope:
+    header: dict[str, object] = {
+        "protocolVersion": PROTOCOL_VERSION,
+        "messageId": message_id or f"msg-{uuid4().hex}",
+        "deviceId": device_id,
+        "timestamp": timestamp or now_ms(),
+        "type": "command.request",
+        "action": action,
+        "expectedStateVersion": expected_version,
+    }
+    encrypted = encrypt_payload(session.data_key, payload, header)
+    return SecureCommandEnvelope(**header, **encrypted)
+
+
+def process(
+    service: GatewayService,
+    session: ClientSession,
+    envelope: SecureCommandEnvelope,
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    return asyncio.run(service.process_command(session, envelope))
+
+
+@pytest.fixture
+def service(tmp_path: Path):
+    gateway = GatewayService(make_config(tmp_path))
+    yield gateway
+    asyncio.run(gateway.stop())
+
+
+def test_pairing_and_authentication(service: GatewayService) -> None:
+    credential, session = pair(service)
+    assert len(credential) >= 40
+    assert session.client_id.startswith("test-client-")
+    assert len(session.data_key) == 32
+    with pytest.raises(Exception) as invalid:
+        service.sessions.authenticate("not-a-real-token")
+    assert getattr(invalid.value, "code", None) == AUTH_FAILED
+
+
+def test_pairing_rate_limit() -> None:
+    registry = SessionRegistry("123456")
+    for _ in range(4):
+        with pytest.raises(Exception) as failure:
+            registry.pair("source-a", "client-12345678", "000000")
+        assert failure.value.code == AUTH_FAILED
+    with pytest.raises(Exception) as locked:
+        registry.pair("source-a", "client-12345678", "000000")
+    assert locked.value.code == RATE_LIMITED
+    assert locked.value.retry_after_seconds == 600
+
+
+def test_light_command_is_authoritative_and_idempotent(
+    service: GatewayService,
+) -> None:
+    _, session = pair(service)
+    light = service.devices.get("light-living-01")
+    envelope = command(
+        session,
+        device_id=light["id"],
+        action="setPower",
+        expected_version=light["stateVersion"],
+        payload={"power": True},
+        message_id="msg-idempotency-0001",
+    )
+    first, events = process(service, session, envelope)
+    first_version = service.devices.get(light["id"])["stateVersion"]
+    second, duplicate_events = process(service, session, envelope)
+    assert first["success"] is True
+    assert events[0]["type"] == "state.changed"
+    assert second == first
+    assert duplicate_events == []
+    assert service.devices.get(light["id"])["stateVersion"] == first_version
+
+
+def test_tamper_replay_and_state_conflict(service: GatewayService) -> None:
+    _, session = pair(service)
+    light = service.devices.get("light-living-01")
+    original = command(
+        session,
+        device_id=light["id"],
+        action="setBrightness",
+        expected_version=light["stateVersion"],
+        payload={"brightness": 80},
+        message_id="msg-security-original",
+    )
+    raw = original.model_dump()
+    raw["ciphertext"] = (
+        ("A" if raw["ciphertext"][0] != "A" else "B")
+        + raw["ciphertext"][1:]
+    )
+    tampered, _ = process(
+        service, session, SecureCommandEnvelope.model_validate(raw)
+    )
+    assert tampered["success"] is False
+    assert tampered["error"]["code"] == "REPLAY_DETECTED"
+
+    replay_raw = original.model_dump()
+    replay_raw["messageId"] = "msg-security-reused-nonce"
+    replay, _ = process(
+        service, session, SecureCommandEnvelope.model_validate(replay_raw)
+    )
+    assert replay["error"]["code"] == "REPLAY_DETECTED"
+
+    stale = command(
+        session,
+        device_id=light["id"],
+        action="setPower",
+        expected_version=0,
+        payload={"power": True},
+    )
+    conflict, _ = process(service, session, stale)
+    assert conflict["error"]["code"] == "STATE_CONFLICT"
+
+
+def test_expired_message_is_rejected(service: GatewayService) -> None:
+    _, session = pair(service)
+    light = service.devices.get("light-living-01")
+    envelope = command(
+        session,
+        device_id=light["id"],
+        action="setPower",
+        expected_version=light["stateVersion"],
+        payload={"power": True},
+        timestamp=now_ms() - 31_000,
+    )
+    result, _ = process(service, session, envelope)
+    assert result["error"]["code"] == "REPLAY_DETECTED"
+    assert service.devices.get(light["id"])["power"] is False
+
+
+def test_away_scene_returns_per_device_results(
+    service: GatewayService,
+) -> None:
+    _, session = pair(service)
+    service.devices.get("light-living-01")["power"] = True
+    service.devices.get("ac-living-01")["power"] = True
+    service.devices.get("door-entry-01")["locked"] = False
+    envelope = command(
+        session,
+        device_id="scene-away",
+        action="executeAway",
+        expected_version=None,
+        payload={},
+    )
+    result, events = process(service, session, envelope)
+    assert result["success"] is True
+    assert len(result["details"]) == 3
+    assert all(item["success"] for item in result["details"])
+    assert len(events) == 3
+    assert service.devices.get("light-living-01")["power"] is False
+    assert service.devices.get("ac-living-01")["power"] is False
+    assert service.devices.get("door-entry-01")["locked"] is True
+
+
+def test_automation_ac_and_door_behaviour(service: GatewayService) -> None:
+    _, session = pair(service)
+    light = service.devices.get("light-living-01")
+    auto = command(
+        session,
+        device_id=light["id"],
+        action="setAutomationConfig",
+        expected_version=light["stateVersion"],
+        payload={
+            "enabled": True,
+            "illuminanceThresholdLux": 100,
+            "noPresenceDelaySeconds": 5,
+        },
+    )
+    process(service, session, auto)
+    service.devices.inject_environment(
+        {
+            "temperatureCelsius": None,
+            "humidityPercent": None,
+            "illuminanceLux": 10,
+            "presence": True,
+        }
+    )
+    service.devices.tick()
+    assert service.devices.get(light["id"])["power"] is True
+
+    env = service.devices.get("env-living-01")
+    ac = service.devices.get("ac-living-01")
+    before = env["temperatureCelsius"]
+    env["_manualInjectionUntil"] = 0
+    ac["power"] = True
+    ac["mode"] = "cool"
+    ac["targetTemperatureCelsius"] = 16
+    service.devices.tick()
+    assert env["temperatureCelsius"] < before
+
+    door = service.devices.get("door-entry-01")
+    unlock = command(
+        session,
+        device_id=door["id"],
+        action="unlock",
+        expected_version=door["stateVersion"],
+        payload={},
+    )
+    process(service, session, unlock)
+    door["autoLockAt"] = now_ms() - 1
+    service.devices.tick()
+    assert door["locked"] is True
+
+
+def test_sqlite_contains_no_session_secret_columns(
+    service: GatewayService,
+) -> None:
+    for table in ("audit_logs", "alerts", "environment_history"):
+        columns = service.storage.table_columns(table)
+        joined = " ".join(columns).lower()
+        assert "credential" not in joined
+        assert "data_key" not in joined
+        assert "token" not in joined
+
+
+def test_rest_and_websocket_contract(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    gateway = GatewayService(config)
+    app = create_app(config, gateway)
+    with TestClient(app) as client:
+        health = client.get("/api/v1/health")
+        assert health.status_code == 200
+        assert health.json()["protocolVersion"] == "1.0"
+
+        paired = client.post(
+            "/api/v1/pair",
+            json={
+                "protocolVersion": "1.0",
+                "pairingCode": "123456",
+                "clientId": "rest-client-12345678",
+            },
+        )
+        assert paired.status_code == 200
+        credential = paired.json()["credential"]
+        session = gateway.sessions.authenticate(credential)
+        headers = {"Authorization": f"Bearer {credential}"}
+        snapshot = client.get("/api/v1/devices", headers=headers)
+        assert snapshot.status_code == 200
+        assert len(snapshot.json()["devices"]) == 4
+
+        light = gateway.devices.get("light-living-01")
+        envelope = command(
+            session,
+            device_id=light["id"],
+            action="setPower",
+            expected_version=light["stateVersion"],
+            payload={"power": True},
+        )
+        with client.websocket_connect(
+            "/ws/v1/events", headers=headers
+        ) as websocket:
+            heartbeat = websocket.receive_json()
+            assert heartbeat["type"] == "heartbeat"
+            websocket.send_json(envelope.model_dump())
+            result = websocket.receive_json()
+            event = websocket.receive_json()
+            assert result["type"] == "command.result"
+            assert result["success"] is True
+            assert event["type"] == "state.changed"
+
+        gateway.devices.tick()
+        history = client.get(
+            "/api/v1/history/environment",
+            params={
+                "from": now_ms() - 60_000,
+                "to": now_ms() + 1_000,
+                "limit": 10,
+            },
+            headers=headers,
+        )
+        assert history.status_code == 200
+        assert history.json()["items"]
+
+        logs = client.get("/api/v1/logs", headers=headers)
+        assert logs.status_code == 200
+        assert logs.json()["items"]
+
