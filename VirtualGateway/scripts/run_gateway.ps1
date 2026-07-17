@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$GatewayRoot = Resolve-Path (Join-Path $PSScriptRoot "..\gateway")
+$GatewayRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $env:DEVCONTROL_HOST = $HostAddress
 $env:DEVCONTROL_PORT = $Port.ToString()
 $env:DEVCONTROL_ADMIN_PORT = $AdminPort.ToString()

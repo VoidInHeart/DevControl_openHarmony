@@ -3,7 +3,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$GatewayRoot = Resolve-Path (Join-Path $PSScriptRoot "..\gateway")
+$GatewayRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Push-Location $GatewayRoot
 try {
   python scripts/run_e2e_suite.py --performance-count 100 `

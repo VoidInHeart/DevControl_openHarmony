@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$GatewayRoot = Resolve-Path (Join-Path $PSScriptRoot "..\gateway")
+$GatewayRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Push-Location $GatewayRoot
 try {
   python scripts/generate_demo_certs.py --host $HostName --ip $IpAddress

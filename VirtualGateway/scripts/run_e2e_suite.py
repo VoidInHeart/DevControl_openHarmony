@@ -11,7 +11,7 @@ import httpx
 
 
 GATEWAY_ROOT = Path(__file__).resolve().parents[1]
-BASE_URL = "https://localhost:8443"
+BASE_URL = "https://127.0.0.1:8443"
 CA_FILE = GATEWAY_ROOT / "certs" / "demo-ca.crt"
 
 

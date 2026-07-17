@@ -29,7 +29,7 @@ def main() -> None:
     parser.add_argument(
         "--app-ca",
         type=Path,
-        default=Path("../entry/src/main/resources/rawfile/demo_ca.crt"),
+        default=Path("../DevControl/entry/src/main/resources/rawfile/demo_ca.crt"),
     )
     args = parser.parse_args()
 

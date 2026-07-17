@@ -1,29 +1,26 @@
 # DevControl V1.1
 
-DevControl 是由 HarmonyOS 家庭控制端与 FastAPI 虚拟家庭网关组成的竞赛级软件原型。正式运行链路以网关为唯一设备状态权威，APP 不包含本地设备成功模拟路径。
+DevControl 是 HarmonyOS 家庭控制端工程，使用 ArkTS + Native C++ 架构。正式运行链路以相邻的独立虚拟网关为唯一设备状态权威，APP 不包含本地设备成功模拟路径。
 
 ## 目录
 
 - `entry/`：HarmonyOS 6.1.1 / API 24 ArkTS APP 与 Native C++ 安全核心。
-- `gateway/`：Python 3.11–3.13 FastAPI HTTPS/WSS 网关。
-- `protocol/`：协议 1.0 JSON Schema 与 AAD 约定。
-- `scripts/`：证书、网关、构建、测试和安全扫描脚本。
+- `scripts/`：APP 构建和安全扫描脚本。
+- `../VirtualGateway/`：独立 Python FastAPI HTTPS/WSS 虚拟网关与协议契约。
 - `../docs/`：需求、设计、用户、验收矩阵和测试报告。
 - `../docs/开发调试指南.md`：DevEco Studio 全链路跑通、设备联调与常见故障排查。
 
 ## 快速验证
 
 ```powershell
-python -m pip install -r gateway/requirements.txt
-.\scripts\generate_demo_certs.ps1
-.\scripts\test_gateway.ps1
 .\scripts\security_scan.ps1
 .\scripts\build_app.ps1
 ```
 
-启动演示网关：
+网关的安装、证书、测试和启动命令在 `../VirtualGateway/README.md` 中维护。启动演示网关：
 
 ```powershell
+cd ..\VirtualGateway
 .\scripts\run_gateway.ps1 -PairingCode 123456
 ```
 

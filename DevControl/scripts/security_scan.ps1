@@ -63,8 +63,7 @@ if ($null -eq $Ripgrep) {
       $RelativePath = $Child.FullName.Substring($RootPath.Length).
         TrimStart("\", "/").Replace("\", "/")
       $IsExcluded = $RelativePath -eq "build-profile.signing.local.json" -or
-        $RelativePath -eq "scripts/security_scan.ps1" -or
-        $RelativePath -like "gateway/certs/*.key"
+        $RelativePath -eq "scripts/security_scan.ps1"
       $IsTextFile = $AllowedNames -contains $Child.Name -or
         $AllowedExtensions -contains $Child.Extension.ToLowerInvariant()
       if (-not $IsExcluded -and $IsTextFile -and $Child.Length -le 5MB) {
@@ -78,9 +77,6 @@ $Failures = @()
 foreach ($Pattern in $Patterns) {
   if ($null -ne $Ripgrep) {
     $PatternHits = & $Ripgrep.Source -n --hidden `
-      -g "!gateway/certs/*.key" `
-      -g "!gateway/data/**" `
-      -g "!gateway/reports/**" `
       -g "!build-profile.signing.local.json" `
       -g "!**/build/**" `
       -g "!**/.cxx/**" `

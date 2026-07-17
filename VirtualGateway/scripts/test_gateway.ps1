@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$GatewayRoot = Resolve-Path (Join-Path $PSScriptRoot "..\gateway")
+$GatewayRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $TempRoot = [System.IO.Path]::GetTempPath()
 $PytestTemp = Join-Path $TempRoot (
   "DevControl-pytest-{0}-{1}" -f $PID, [Guid]::NewGuid().ToString("N")

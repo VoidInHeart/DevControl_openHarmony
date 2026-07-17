@@ -1,5 +1,5 @@
 param(
-  [string]$DevEcoHome = "D:\DevEco Studio",
+  [string]$DevEcoHome = "",
   [ValidateSet("debug", "release")]
   [string]$BuildMode = "debug"
 )
@@ -8,11 +8,44 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $BuildProfile = Join-Path $ProjectRoot "build-profile.json5"
 $LocalSigning = Join-Path $ProjectRoot "build-profile.signing.local.json"
+
+$DevEcoSource = "parameter -DevEcoHome"
+if ([string]::IsNullOrWhiteSpace($DevEcoHome)) {
+  # Use the .NET API instead of enumerating Env:. Some Windows launchers can
+  # expose environment keys with duplicate casing, which breaks Env: listing.
+  $DevEcoHome = [System.Environment]::GetEnvironmentVariable(
+    "DEVECO_HOME",
+    [System.EnvironmentVariableTarget]::Process
+  )
+  $DevEcoSource = "environment variable DEVECO_HOME"
+}
+
+if ([string]::IsNullOrWhiteSpace($DevEcoHome)) {
+  $ProgramFiles = [System.Environment]::GetFolderPath(
+    [System.Environment+SpecialFolder]::ProgramFiles
+  )
+  $CommonHomes = @(
+    "D:\tool\DevEco\DevEco Studio",
+    "D:\DevEco Studio",
+    (Join-Path $ProgramFiles "Huawei\DevEco Studio")
+  )
+  $DevEcoHome = $CommonHomes | Where-Object {
+    Test-Path -LiteralPath (Join-Path $_ "tools\hvigor\bin\hvigorw.bat")
+  } | Select-Object -First 1
+  $DevEcoSource = "common installation path"
+}
+
+if ([string]::IsNullOrWhiteSpace($DevEcoHome)) {
+  throw "DevEco Studio was not found. Set DEVECO_HOME or pass -DevEcoHome."
+}
+
+$DevEcoHome = [System.IO.Path]::GetFullPath($DevEcoHome.Trim().Trim('"'))
 $env:DEVECO_SDK_HOME = Join-Path $DevEcoHome "sdk"
 $Hvigor = Join-Path $DevEcoHome "tools\hvigor\bin\hvigorw.bat"
 if (-not (Test-Path -LiteralPath $Hvigor)) {
-  throw "DevEco Studio Hvigor was not found at $Hvigor"
+  throw "DevEco Studio from $DevEcoSource has no Hvigor at $Hvigor"
 }
+Write-Host "Using DevEco Studio from ${DevEcoSource}: $DevEcoHome"
 
 $OriginalProfile = [System.IO.File]::ReadAllText($BuildProfile)
 $SigningApplied = $false

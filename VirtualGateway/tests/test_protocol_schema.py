@@ -12,7 +12,7 @@ from devcontrol_gateway.service import GatewayService
 
 
 SCHEMA_PATH = (
-    Path(__file__).resolve().parents[2] / "protocol" / "protocol-v1.schema.json"
+    Path(__file__).resolve().parents[1] / "protocol" / "protocol-v1.schema.json"
 )
 
 

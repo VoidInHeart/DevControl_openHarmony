@@ -36,7 +36,7 @@ def send_and_expect_error(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="https://localhost:8443")
+    parser.add_argument("--base-url", default="https://127.0.0.1:8443")
     parser.add_argument("--ca", type=Path, default=Path("certs/demo-ca.crt"))
     parser.add_argument("--pairing-code", default="123456")
     args = parser.parse_args()
