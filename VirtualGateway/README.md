@@ -27,9 +27,11 @@ python -m pip install -r requirements.txt
 ## 启动
 
 ```powershell
-.\scripts\run_gateway.ps1 -PairingCode 123456
+.\scripts\run_gateway.ps1
 ```
 
 业务接口默认监听 `https://0.0.0.0:8443`，本机维护接口只监听 `127.0.0.1:18444`。APP 使用 `https://<网关主机>:8443` 配对，证书 SAN 必须包含实际主机名或 IP。
 
-演示证书和默认配对码仅用于本地开发，不适用于生产环境。
+启动日志会显示随机六位一次性配对码。配对成功或五分钟到期后，该码立即轮换；如确需可重复的首个调试码，可显式传入 `-InitialPairingCode`，不要把固定码写入仓库。客户端凭据默认有效 24 小时，可用 `-CredentialTtlSeconds` 调整；到期后 HTTP 和已建立的 WSS 都会返回认证失败，APP 需要重新配对。
+
+演示证书和调试配对机制仅用于本地开发，不适用于生产环境。

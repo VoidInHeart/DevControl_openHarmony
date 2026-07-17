@@ -9,6 +9,8 @@
 - 鉴权：`Authorization: Bearer <credential>`
 - 协议版本：`1.0`
 
+配对响应包含 `issuedAt` 和 `expiresAt`（Unix 毫秒）。网关在每次 REST 请求、WSS 命令以及空闲 WSS 等待期间检查有效期；到期后以 `AUTH_FAILED` 拒绝并关闭事件连接。
+
 ## 加密命令
 
 业务载荷使用 AES-256-GCM。`nonce`、`ciphertext` 和 `authTag` 使用无填充 Base64URL；nonce 为 12 字节，认证标签为 16 字节。
@@ -47,7 +49,7 @@ protocolVersion,messageId,deviceId,timestamp,type,action,expectedStateVersion
 
 | 错误码 | 含义 |
 | --- | --- |
-| `AUTH_FAILED` | 凭据无效或会话失效 |
+| `AUTH_FAILED` | 凭据无效、已过期或会话失效 |
 | `DEVICE_OFFLINE` | 设备离线 |
 | `INVALID_COMMAND` | 格式、动作或参数无效 |
 | `COMMAND_TIMEOUT` | 执行超过 5 秒 |
