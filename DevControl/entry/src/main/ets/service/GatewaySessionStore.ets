@@ -38,7 +38,8 @@ export class GatewaySessionStore {
     const ciphertext = await this.crypt(
       huks.HuksKeyPurpose.HUKS_KEY_PURPOSE_ENCRYPT,
       iv,
-      plaintext
+      plaintext,
+      null
     );
     if (ciphertext.length <= GCM_TAG_LENGTH) {
       throw new Error('HUKS encrypted output is too short');
@@ -89,13 +90,11 @@ export class GatewaySessionStore {
     if (iv.length !== 12 || authTag.length !== GCM_TAG_LENGTH) {
       throw new Error('Stored gateway session nonce or tag is invalid');
     }
-    const ciphertext = new Uint8Array(encryptedData.length + authTag.length);
-    ciphertext.set(encryptedData, 0);
-    ciphertext.set(authTag, encryptedData.length);
     const plaintext = await this.crypt(
       huks.HuksKeyPurpose.HUKS_KEY_PURPOSE_DECRYPT,
       iv,
-      ciphertext
+      encryptedData,
+      authTag
     );
     const parsed = JSON.parse(this.decoder.decodeToString(plaintext)) as Record<string, Object>;
     const session = new GatewaySession();
@@ -176,7 +175,8 @@ export class GatewaySessionStore {
   private async crypt(
     purpose: huks.HuksKeyPurpose,
     iv: Uint8Array,
-    input: Uint8Array
+    input: Uint8Array,
+    authTag: Uint8Array | null
   ): Promise<Uint8Array> {
     const properties: huks.HuksParam[] = [
       {
@@ -204,6 +204,15 @@ export class GatewaySessionStore {
         value: this.encoder.encodeInto(SESSION_AAD)
       }
     ];
+    if (purpose === huks.HuksKeyPurpose.HUKS_KEY_PURPOSE_DECRYPT) {
+      if (authTag === null || authTag.length !== GCM_TAG_LENGTH) {
+        throw new Error('HUKS AES-GCM authentication tag is invalid');
+      }
+      properties.push({
+        tag: huks.HuksTag.HUKS_TAG_AE_TAG,
+        value: authTag
+      });
+    }
     const handle = await huks.initSession(KEY_ALIAS, { properties: properties });
     try {
       const result = await huks.finishSession(handle.handle, {
