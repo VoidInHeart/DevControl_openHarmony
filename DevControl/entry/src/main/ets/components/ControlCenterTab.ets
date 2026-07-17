@@ -15,7 +15,7 @@ export struct ControlCenterTab {
       .width('100%')
     }
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
     .backgroundColor('#EAF5FF')
     .scrollBar(BarState.Auto)
   }
