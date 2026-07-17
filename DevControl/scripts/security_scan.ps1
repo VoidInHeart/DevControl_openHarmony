@@ -1,17 +1,35 @@
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$KeyPasswordPattern = '(?i)[\x22\x27]?keyPassword[\x22\x27]?\s*[:=]\s*[\x22\x27][^\x22\x27]+[\x22\x27]'
+$StorePasswordPattern = '(?i)[\x22\x27]?storePassword[\x22\x27]?\s*[:=]\s*[\x22\x27][^\x22\x27]+[\x22\x27]'
+$CertificatePathPattern = '(?i)[\x22\x27]?certpath[\x22\x27]?\s*[:=]\s*[\x22\x27][A-Za-z]:[\\/]'
+$CredentialPattern = '(?i)[\x22\x27]?credential[\x22\x27]?\s*[:=]\s*[\x22\x27][A-Za-z0-9_-]{24,}[\x22\x27]'
+$DataKeyPattern = '(?i)[\x22\x27]?dataKey[\x22\x27]?\s*[:=]\s*[\x22\x27][A-Za-z0-9_-]{24,}[\x22\x27]'
 $Patterns = @(
   "simulateDevice",
   "xorProcess",
   "tlsConnect",
   "DEFAULT_ENCRYPTION_KEY",
   "BEGIN PRIVATE KEY",
-  '(?i)keyPassword\s*:\s*\x22[^\x22]+\x22',
-  '(?i)storePassword\s*:\s*\x22[^\x22]+\x22',
-  '(?i)certpath\s*:\s*\x22[A-Za-z]:[\\/]',
-  'credential\s*:\s*\x22[A-Za-z0-9_-]{24,}\x22',
-  'dataKey\s*:\s*\x22[A-Za-z0-9_-]{24,}\x22'
+  $KeyPasswordPattern,
+  $StorePasswordPattern,
+  $CertificatePathPattern,
+  $CredentialPattern,
+  $DataKeyPattern
 )
+
+$PatternSelfTests = @(
+  @($KeyPasswordPattern, '"keyPassword": "do-not-commit"'),
+  @($StorePasswordPattern, "'storePassword' = 'do-not-commit'"),
+  @($CertificatePathPattern, '"certpath": "C:\\private\\debug.cer"'),
+  @($CredentialPattern, '"credential": "abcdefghijklmnopqrstuvwxyz012345"'),
+  @($DataKeyPattern, "dataKey = 'abcdefghijklmnopqrstuvwxyz012345'")
+)
+foreach ($TestCase in $PatternSelfTests) {
+  if ($TestCase[1] -notmatch $TestCase[0]) {
+    throw "Security scan pattern self-test failed for sample: $($TestCase[1])"
+  }
+}
 
 $Ripgrep = Get-Command rg -ErrorAction SilentlyContinue
 $PowerShellFiles = @()
