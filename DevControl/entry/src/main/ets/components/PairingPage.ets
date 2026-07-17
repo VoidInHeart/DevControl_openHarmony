@@ -6,6 +6,12 @@ export struct PairingPage {
   @State gatewayAddress: string = 'https://192.168.1.100:8443';
   @State pairingCode: string = '';
 
+  aboutToAppear(): void {
+    if (this.deviceManager.lastGatewayAddress.length > 0) {
+      this.gatewayAddress = this.deviceManager.lastGatewayAddress;
+    }
+  }
+
   build() {
     Scroll() {
       Column() {

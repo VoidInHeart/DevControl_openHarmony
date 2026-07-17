@@ -20,6 +20,7 @@ import { GatewayTransportListener } from '../service/GatewayTransport';
 import { DemoCertificateStore } from '../service/DemoCertificateStore';
 import { DeviceSnapshotStore } from '../service/DeviceSnapshotStore';
 import { GatewaySessionStore } from '../service/GatewaySessionStore';
+import { PairingPreferenceStore } from '../service/PairingPreferenceStore';
 import { WssGatewayTransport } from '../service/WssGatewayTransport';
 
 @Observed
@@ -34,6 +35,7 @@ export class DeviceManager implements GatewayTransportListener {
   initialized: boolean = false;
   pairingBusy: boolean = false;
   gatewayAddress: string = '';
+  lastGatewayAddress: string = 'https://192.168.1.100:8443';
   lastError: string = '';
   lastErrorCode: string = '';
   lastSyncAt: number = 0;
@@ -43,6 +45,7 @@ export class DeviceManager implements GatewayTransportListener {
   private transport: WssGatewayTransport = new WssGatewayTransport();
   private sessionStore: GatewaySessionStore | null = null;
   private snapshotStore: DeviceSnapshotStore | null = null;
+  private pairingPreferenceStore: PairingPreferenceStore | null = null;
   private session: GatewaySession | null = null;
   private pendingByMessage: Map<string, string> = new Map<string, string>();
   private actionByMessage: Map<string, string> = new Map<string, string>();
@@ -55,6 +58,15 @@ export class DeviceManager implements GatewayTransportListener {
     this.initialized = true;
     this.sessionStore = new GatewaySessionStore(context);
     this.snapshotStore = new DeviceSnapshotStore(context);
+    this.pairingPreferenceStore = new PairingPreferenceStore(context);
+    try {
+      const rememberedAddress = await this.pairingPreferenceStore.restoreGatewayAddress();
+      if (rememberedAddress.length > 0) {
+        this.lastGatewayAddress = rememberedAddress;
+        this.gatewayAddress = rememberedAddress;
+      }
+    } catch (preferenceError) {
+    }
     try {
       const caPath = await DemoCertificateStore.prepare(context);
       this.transport.setCertificateAuthorityPath(caPath);
@@ -71,6 +83,7 @@ export class DeviceManager implements GatewayTransportListener {
       }
       this.session = restored;
       this.gatewayAddress = restored.gatewayAddress;
+      this.lastGatewayAddress = restored.gatewayAddress;
       this.pairingRequired = false;
       this.transport.configure(restored);
       await this.connectAndSync();
@@ -81,7 +94,7 @@ export class DeviceManager implements GatewayTransportListener {
         this.pairingRequired = true;
         this.setError('AUTH_FAILED', '安全会话恢复失败，请重新配对');
       } else {
-        this.pairingRequired = false;
+        this.pairingRequired = true;
       }
     }
   }
@@ -91,6 +104,14 @@ export class DeviceManager implements GatewayTransportListener {
     if (normalized.indexOf('https://') !== 0) {
       this.setError('INVALID_COMMAND', '网关地址必须以 https:// 开头');
       return false;
+    }
+    this.gatewayAddress = normalized;
+    this.lastGatewayAddress = normalized;
+    if (this.pairingPreferenceStore !== null) {
+      try {
+        await this.pairingPreferenceStore.saveGatewayAddress(normalized);
+      } catch (preferenceError) {
+      }
     }
     if (!/^\d{6}$/.test(pairingCode.trim())) {
       this.setError('INVALID_COMMAND', '配对码必须是6位数字');
@@ -113,12 +134,14 @@ export class DeviceManager implements GatewayTransportListener {
       await this.sessionStore.save(newSession);
       this.session = newSession;
       this.gatewayAddress = newSession.gatewayAddress;
+      this.lastGatewayAddress = newSession.gatewayAddress;
       this.transport.configure(newSession);
       this.pairingRequired = false;
       await this.connectAndSync();
       return true;
     } catch (error) {
       this.connectionState = ConnectionState.DISCONNECTED;
+      this.pairingRequired = true;
       this.setErrorFromException(error);
       return false;
     } finally {
@@ -155,7 +178,7 @@ export class DeviceManager implements GatewayTransportListener {
     this.sceneResults = [];
     this.pendingDeviceIds = [];
     this.pairingRequired = true;
-    this.gatewayAddress = '';
+    this.gatewayAddress = this.lastGatewayAddress;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.lastError = '';
   }
@@ -168,10 +191,14 @@ export class DeviceManager implements GatewayTransportListener {
   onConnectionStateChanged(state: string): void {
     this.connectionState = state;
     if (state === ConnectionState.ONLINE) {
+      this.pairingRequired = false;
       this.lastHeartbeatAt = Date.now();
       this.refreshAll().catch((error: Error) => {
         this.setErrorFromException(error);
       });
+    } else if (state === ConnectionState.DISCONNECTED) {
+      this.pairingRequired = true;
+      this.clearAllCommandTimeouts();
     }
   }
 

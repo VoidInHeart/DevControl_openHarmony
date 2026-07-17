@@ -39,8 +39,7 @@ export class WssGatewayTransport implements GatewayTransport {
   private socket: webSocket.WebSocket | null = null;
   private listener: GatewayTransportListener | null = null;
   private closedByUser: boolean = false;
-  private reconnectAttempt: number = 0;
-  private reconnectTimer: number = -1;
+  private disconnectionReported: boolean = false;
   private heartbeatTimer: number = -1;
   private lastMessageAt: number = 0;
 
@@ -138,14 +137,22 @@ export class WssGatewayTransport implements GatewayTransport {
   async connect(listener: GatewayTransportListener): Promise<void> {
     const session = this.requireSession();
     this.listener = listener;
+    if (this.socket !== null) {
+      this.closedByUser = true;
+      await this.closeSocketOnly();
+    }
     this.closedByUser = false;
-    this.clearReconnectTimer();
+    this.disconnectionReported = false;
     listener.onConnectionStateChanged(ConnectionState.CONNECTING);
     const socket = webSocket.createWebSocket();
     this.socket = socket;
     socket.on('message', (error: BusinessError, data: string | ArrayBuffer): void => {
+      if (socket !== this.socket) {
+        return;
+      }
       if (error) {
-        this.notifyError('INTERNAL_ERROR', error.message);
+        this.handleUnexpectedDisconnect(this.describeError(error, 'WebSocket 消息接收失败'));
+        this.closeSocketOnly();
         return;
       }
       this.lastMessageAt = Date.now();
@@ -161,16 +168,18 @@ export class WssGatewayTransport implements GatewayTransport {
       }
     });
     socket.on('close', (error: BusinessError): void => {
-      if (error) {
-        this.notifyError('INTERNAL_ERROR', error.message);
+      if (socket !== this.socket) {
+        return;
       }
-      this.stopHeartbeatMonitor();
-      if (!this.closedByUser) {
-        this.scheduleReconnect();
-      }
+      this.socket = null;
+      this.handleUnexpectedDisconnect(this.describeError(error, 'WebSocket 连接已断开'));
     });
     socket.on('error', (error: BusinessError): void => {
-      this.notifyError('INTERNAL_ERROR', error.message);
+      if (socket !== this.socket) {
+        return;
+      }
+      this.handleUnexpectedDisconnect(this.describeError(error, 'WebSocket 连接异常'));
+      this.closeSocketOnly();
     });
     const wsAddress = session.gatewayAddress.replace('https://', 'wss://') + '/ws/v1/events';
     const options: webSocket.WebSocketRequestOptions = {
@@ -184,13 +193,13 @@ export class WssGatewayTransport implements GatewayTransport {
     }
     try {
       await socket.connect(wsAddress, options);
-      this.reconnectAttempt = 0;
       this.lastMessageAt = Date.now();
       listener.onConnectionStateChanged(ConnectionState.ONLINE);
       this.startHeartbeatMonitor();
     } catch (error) {
-      this.scheduleReconnect();
-      const message = error instanceof Error ? error.message : JSON.stringify(error);
+      const message = this.describeError(error as Object, 'WebSocket 连接失败');
+      this.handleUnexpectedDisconnect(message);
+      await this.closeSocketOnly();
       throw new Error(message);
     }
   }
@@ -239,13 +248,12 @@ export class WssGatewayTransport implements GatewayTransport {
     if (this.listener === null) {
       throw new Error('Transport listener is not configured');
     }
-    await this.closeSocketOnly();
     await this.connect(this.listener);
   }
 
   async close(): Promise<void> {
     this.closedByUser = true;
-    this.clearReconnectTimer();
+    this.disconnectionReported = true;
     this.stopHeartbeatMonitor();
     await this.closeSocketOnly();
     if (this.listener !== null) {
@@ -300,34 +308,12 @@ export class WssGatewayTransport implements GatewayTransport {
     }
   }
 
-  private scheduleReconnect(): void {
-    if (this.closedByUser || this.listener === null || this.reconnectTimer !== -1) {
-      return;
-    }
-    this.listener.onConnectionStateChanged(ConnectionState.RECONNECTING);
-    const delays: number[] = [1000, 2000, 4000, 8000, 10000];
-    const index = Math.min(this.reconnectAttempt, delays.length - 1);
-    const delay = delays[index];
-    this.reconnectAttempt++;
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = -1;
-      if (this.listener !== null) {
-        this.connect(this.listener).catch((error: Error) => {
-          this.notifyError('INTERNAL_ERROR', error.message);
-          this.scheduleReconnect();
-        });
-      }
-    }, delay) as number;
-  }
-
   private startHeartbeatMonitor(): void {
     this.stopHeartbeatMonitor();
     this.heartbeatTimer = setInterval(() => {
       if (Date.now() - this.lastMessageAt > 45000) {
-        this.notifyError('COMMAND_TIMEOUT', '网关心跳超时');
-        this.closeSocketOnly().finally(() => {
-          this.scheduleReconnect();
-        });
+        this.handleUnexpectedDisconnect('网关心跳超时');
+        this.closeSocketOnly();
       }
     }, 5000) as number;
   }
@@ -336,13 +322,6 @@ export class WssGatewayTransport implements GatewayTransport {
     if (this.heartbeatTimer !== -1) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = -1;
-    }
-  }
-
-  private clearReconnectTimer(): void {
-    if (this.reconnectTimer !== -1) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = -1;
     }
   }
 
@@ -357,9 +336,41 @@ export class WssGatewayTransport implements GatewayTransport {
     }
   }
 
+  private describeError(error: Object, fallback: string): string {
+    if (error instanceof Error && typeof error.message === 'string' && error.message.length > 0) {
+      return error.message;
+    }
+    return fallback;
+  }
+
+  private handleUnexpectedDisconnect(message: string): void {
+    if (this.closedByUser || this.disconnectionReported) {
+      return;
+    }
+    this.disconnectionReported = true;
+    this.stopHeartbeatMonitor();
+    this.notifyError('DEVICE_OFFLINE', message);
+    if (this.listener !== null) {
+      try {
+        this.listener.onConnectionStateChanged(ConnectionState.DISCONNECTED);
+      } catch (listenerError) {
+      }
+    }
+  }
+
   private notifyError(code: string, message: string): void {
     if (this.listener !== null) {
-      this.listener.onTransportError(code, native.redactDiagnostic(message));
+      const safeMessage = typeof message === 'string' && message.length > 0 ?
+        message : '网关连接异常';
+      let redacted = safeMessage;
+      try {
+        redacted = native.redactDiagnostic(safeMessage);
+      } catch (nativeError) {
+      }
+      try {
+        this.listener.onTransportError(code, redacted);
+      } catch (listenerError) {
+      }
     }
   }
 }
