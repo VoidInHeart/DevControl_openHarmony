@@ -75,6 +75,15 @@ export class WssGatewayTransport implements GatewayTransport {
     session.credential = response['credential'] as string;
     session.dataKey = response['dataKey'] as string;
     session.issuedAt = response['issuedAt'] as number;
+    const expiresAt = response['expiresAt'];
+    if (
+      typeof expiresAt !== 'number' ||
+      expiresAt <= session.issuedAt ||
+      expiresAt <= Date.now()
+    ) {
+      throw new Error('AUTH_FAILED:网关签发的凭据已过期');
+    }
+    session.expiresAt = expiresAt as number;
     return session;
   }
 
@@ -265,6 +274,9 @@ export class WssGatewayTransport implements GatewayTransport {
     if (this.session === null) {
       throw new Error('Gateway session is not configured');
     }
+    if (this.session.expiresAt <= Date.now()) {
+      throw new Error('AUTH_FAILED:会话已过期，请重新配对');
+    }
     return this.session;
   }
 
@@ -311,6 +323,11 @@ export class WssGatewayTransport implements GatewayTransport {
   private startHeartbeatMonitor(): void {
     this.stopHeartbeatMonitor();
     this.heartbeatTimer = setInterval(() => {
+      if (this.session !== null && this.session.expiresAt <= Date.now()) {
+        this.handleAuthenticationExpired();
+        this.closeSocketOnly();
+        return;
+      }
       if (Date.now() - this.lastMessageAt > 45000) {
         this.handleUnexpectedDisconnect('网关心跳超时');
         this.closeSocketOnly();
@@ -350,6 +367,21 @@ export class WssGatewayTransport implements GatewayTransport {
     this.disconnectionReported = true;
     this.stopHeartbeatMonitor();
     this.notifyError('DEVICE_OFFLINE', message);
+    if (this.listener !== null) {
+      try {
+        this.listener.onConnectionStateChanged(ConnectionState.DISCONNECTED);
+      } catch (listenerError) {
+      }
+    }
+  }
+
+  private handleAuthenticationExpired(): void {
+    if (this.closedByUser || this.disconnectionReported) {
+      return;
+    }
+    this.disconnectionReported = true;
+    this.stopHeartbeatMonitor();
+    this.notifyError('AUTH_FAILED', '会话已过期，请重新配对');
     if (this.listener !== null) {
       try {
         this.listener.onConnectionStateChanged(ConnectionState.DISCONNECTED);

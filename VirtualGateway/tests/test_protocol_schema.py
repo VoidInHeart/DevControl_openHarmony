@@ -55,6 +55,23 @@ def test_secure_command_matches_shared_schema() -> None:
     validator().validate(envelope)
 
 
+def test_pair_response_matches_shared_schema(tmp_path: Path) -> None:
+    gateway = GatewayService(
+        GatewayConfig(
+            database=tmp_path / "pair-schema.db",
+            initial_pairing_code="123456",
+            enable_background_tasks=False,
+        )
+    )
+    try:
+        response = gateway.sessions.pair(
+            "127.0.0.1", "schema-client-0001", "123456"
+        )
+        validator().validate(response.model_dump())
+    finally:
+        gateway.storage.close()
+
+
 def test_gateway_events_match_shared_schema(tmp_path: Path) -> None:
     gateway = GatewayService(
         GatewayConfig(

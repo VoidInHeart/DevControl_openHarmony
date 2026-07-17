@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from devcontrol_gateway.app import create_app
 from devcontrol_gateway.config import GatewayConfig
@@ -122,6 +123,56 @@ def test_expired_pairing_code_rotates_without_sleeping() -> None:
     assert registry.pairing_expires_in == 300
     current_time[0] += 301
     assert registry.pairing_code == "654321"
+
+
+def test_credential_expires_at_the_configured_boundary() -> None:
+    current_time_ms = [1_700_000_000_000]
+    registry = SessionRegistry(
+        "123456",
+        wall_clock_ms=lambda: current_time_ms[0],
+        credential_ttl_seconds=60,
+    )
+    response = registry.pair("source-a", "client-12345678", "123456")
+    assert response.expiresAt == response.issuedAt + 60_000
+    assert registry.authenticate(response.credential).expires_at == response.expiresAt
+
+    current_time_ms[0] = response.expiresAt
+    with pytest.raises(Exception) as expired:
+        registry.authenticate(response.credential)
+    assert expired.value.code == AUTH_FAILED
+
+
+def test_open_websocket_rejects_commands_after_credential_expiry(
+    tmp_path: Path,
+) -> None:
+    current_time_ms = [1_700_000_000_000]
+    config = make_config(tmp_path)
+    gateway = GatewayService(config)
+    gateway.sessions = SessionRegistry(
+        "123456",
+        wall_clock_ms=lambda: current_time_ms[0],
+        credential_ttl_seconds=1,
+    )
+    credential, _ = pair(gateway)
+
+    with TestClient(create_app(config, gateway)) as client:
+        with client.websocket_connect(
+            "/ws/v1/events",
+            headers={"Authorization": f"Bearer {credential}"},
+        ) as socket:
+            assert socket.receive_json()["type"] == "heartbeat"
+            current_time_ms[0] += 1_000
+            socket.send_json({})
+            with pytest.raises(WebSocketDisconnect) as closed:
+                socket.receive_json()
+            assert closed.value.code == 4401
+
+        response = client.get(
+            "/api/v1/devices",
+            headers={"Authorization": f"Bearer {credential}"},
+        )
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == AUTH_FAILED
 
 
 def test_light_command_is_authoritative_and_idempotent(

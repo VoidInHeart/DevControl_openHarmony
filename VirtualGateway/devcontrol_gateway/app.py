@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
@@ -169,8 +170,20 @@ def create_app(
         )
         try:
             while True:
-                raw = await websocket.receive_json()
                 try:
+                    session = gateway.sessions.authenticate(credential)
+                    raw = await asyncio.wait_for(
+                        websocket.receive_json(),
+                        timeout=gateway.sessions.remaining_seconds(session),
+                    )
+                except TimeoutError:
+                    await websocket.close(code=4401, reason="AUTH_FAILED")
+                    return
+                except GatewayError:
+                    await websocket.close(code=4401, reason="AUTH_FAILED")
+                    return
+                try:
+                    session = gateway.sessions.authenticate(credential)
                     envelope = SecureCommandEnvelope.model_validate(raw)
                     result, state_events = await gateway.process_command(
                         session, envelope
@@ -196,6 +209,11 @@ def create_app(
                             },
                         }
                     )
+                except GatewayError as exc:
+                    if exc.code == AUTH_FAILED:
+                        await websocket.close(code=4401, reason="AUTH_FAILED")
+                        return
+                    raise
         except WebSocketDisconnect:
             pass
         finally:

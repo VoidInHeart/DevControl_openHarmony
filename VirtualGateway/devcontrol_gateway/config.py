@@ -16,6 +16,7 @@ class GatewayConfig:
     tls_key: Path = Path("certs/gateway.key")
     database: Path = Path("data/devcontrol.db")
     initial_pairing_code: str | None = None
+    credential_ttl_seconds: int = 24 * 60 * 60
     admin_token: str = ""
     telemetry_interval_seconds: float = 2.0
     enable_background_tasks: bool = True
@@ -31,6 +32,9 @@ class GatewayConfig:
             tls_key=Path(os.getenv("DEVCONTROL_TLS_KEY", "certs/gateway.key")),
             database=Path(os.getenv("DEVCONTROL_DATABASE", "data/devcontrol.db")),
             initial_pairing_code=os.getenv("DEVCONTROL_INITIAL_PAIRING_CODE"),
+            credential_ttl_seconds=int(
+                os.getenv("DEVCONTROL_CREDENTIAL_TTL_SECONDS", "86400")
+            ),
             admin_token=os.getenv("DEVCONTROL_ADMIN_TOKEN", secrets.token_urlsafe(24)),
             telemetry_interval_seconds=float(
                 os.getenv("DEVCONTROL_TELEMETRY_INTERVAL", "2")

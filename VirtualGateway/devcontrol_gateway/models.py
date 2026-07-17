@@ -22,6 +22,7 @@ class PairResponse(BaseModel):
     credential: str
     dataKey: str
     issuedAt: int
+    expiresAt: int
 
 
 class SecureCommandEnvelope(BaseModel):

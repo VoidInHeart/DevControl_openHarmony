@@ -96,6 +96,7 @@ class ClientSession:
     credential_digest: str
     data_key: bytes
     issued_at: int
+    expires_at: int
 
 
 @dataclass(slots=True)
@@ -114,9 +115,15 @@ class SessionRegistry:
         initial_pairing_code: str | None = None,
         *,
         clock: Callable[[], float] = time.monotonic,
+        wall_clock_ms: Callable[[], int] = now_ms,
+        credential_ttl_seconds: int = 24 * 60 * 60,
         pairing_code_factory: Callable[[], str] | None = None,
     ) -> None:
+        if credential_ttl_seconds <= 0:
+            raise ValueError("Credential lifetime must be positive")
         self._clock = clock
+        self._wall_clock_ms = wall_clock_ms
+        self._credential_ttl_ms = credential_ttl_seconds * 1000
         self._pairing_code_factory = pairing_code_factory or self._random_pairing_code
         self._pairing_code = (
             self._validate_pairing_code(initial_pairing_code)
@@ -196,12 +203,14 @@ class SessionRegistry:
         credential = base64url_encode(credential_bytes)
         digest = hashlib.sha256(credential_bytes).hexdigest()
         data_key = secrets.token_bytes(32)
-        issued_at = now_ms()
+        issued_at = self._wall_clock_ms()
+        expires_at = issued_at + self._credential_ttl_ms
         self._sessions[digest] = ClientSession(
             client_id=client_id,
             credential_digest=digest,
             data_key=data_key,
             issued_at=issued_at,
+            expires_at=expires_at,
         )
         self.rotate_pairing_code()
         return PairResponse(
@@ -209,6 +218,7 @@ class SessionRegistry:
             credential=credential,
             dataKey=base64url_encode(data_key),
             issuedAt=issued_at,
+            expiresAt=expires_at,
         )
 
     def authenticate(self, credential: str) -> ClientSession:
@@ -220,7 +230,13 @@ class SessionRegistry:
         session = self._sessions.get(digest)
         if session is None:
             raise GatewayError(AUTH_FAILED, "客户端凭据无效或网关已重启", 401)
+        if self._wall_clock_ms() >= session.expires_at:
+            self.revoke(digest)
+            raise GatewayError(AUTH_FAILED, "客户端凭据已过期，请重新配对", 401)
         return session
+
+    def remaining_seconds(self, session: ClientSession) -> float:
+        return max(0.0, (session.expires_at - self._wall_clock_ms()) / 1000)
 
     def revoke(self, credential_digest: str) -> None:
         self._sessions.pop(credential_digest, None)

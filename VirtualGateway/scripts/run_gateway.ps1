@@ -3,6 +3,8 @@ param(
   [string]$HostAddress = "0.0.0.0",
   [int]$Port = 8443,
   [int]$AdminPort = 18444,
+  [ValidateRange(1, 31536000)]
+  [int]$CredentialTtlSeconds = 86400,
   [string]$AdminToken = ""
 )
 
@@ -11,6 +13,7 @@ $GatewayRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $env:DEVCONTROL_HOST = $HostAddress
 $env:DEVCONTROL_PORT = $Port.ToString()
 $env:DEVCONTROL_ADMIN_PORT = $AdminPort.ToString()
+$env:DEVCONTROL_CREDENTIAL_TTL_SECONDS = $CredentialTtlSeconds.ToString()
 $env:DEVCONTROL_TLS_CERT = (Join-Path $GatewayRoot "certs\gateway.crt")
 $env:DEVCONTROL_TLS_KEY = (Join-Path $GatewayRoot "certs\gateway.key")
 $env:DEVCONTROL_DATABASE = (Join-Path $GatewayRoot "data\devcontrol.db")

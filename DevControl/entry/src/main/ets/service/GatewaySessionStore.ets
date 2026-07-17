@@ -104,13 +104,21 @@ export class GatewaySessionStore {
     session.credential = parsed['credential'] as string;
     session.dataKey = parsed['dataKey'] as string;
     session.issuedAt = parsed['issuedAt'] as number;
+    const expiresAt = parsed['expiresAt'];
     if (
       session.protocolVersion !== '1.0' ||
       session.gatewayAddress.indexOf('https://') !== 0 ||
       session.credential.length === 0 ||
-      session.dataKey.length === 0
+      session.dataKey.length === 0 ||
+      typeof expiresAt !== 'number' ||
+      expiresAt <= session.issuedAt
     ) {
       throw new Error('Stored gateway session is invalid');
+    }
+    session.expiresAt = expiresAt as number;
+    if (session.expiresAt <= Date.now()) {
+      await this.clear();
+      throw new Error('AUTH_FAILED:Stored gateway session has expired');
     }
     return session;
   }

@@ -16,6 +16,7 @@ function testSession(): GatewaySession {
   session.credential = 'test-credential';
   session.dataKey = 'test-data-key';
   session.issuedAt = 1700000000000;
+  session.expiresAt = Date.now() + 60000;
   return session;
 }
 
@@ -38,6 +39,7 @@ export default function gatewaySessionStoreTest() {
         expect(restored?.clientId).assertEqual(expected.clientId);
         expect(restored?.credential).assertEqual(expected.credential);
         expect(restored?.dataKey).assertEqual(expected.dataKey);
+        expect(restored?.expiresAt).assertEqual(expected.expiresAt);
 
         const blobText = await preferencesStore.get(SESSION_BLOB_KEY, '') as string;
         const blob = JSON.parse(blobText) as Record<string, Object>;

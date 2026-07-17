@@ -143,6 +143,7 @@ export class GatewaySession {
   credential: string = '';
   dataKey: string = '';
   issuedAt: number = 0;
+  expiresAt: number = 0;
 }
 
 export class CommandPayload {

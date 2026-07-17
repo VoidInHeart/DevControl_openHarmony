@@ -212,12 +212,14 @@
     },
     "pairResponse": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "protocolVersion",
         "clientId",
         "credential",
         "dataKey",
-        "issuedAt"
+        "issuedAt",
+        "expiresAt"
       ],
       "properties": {
         "protocolVersion": { "const": "1.0" },
@@ -230,7 +232,8 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{43}$"
         },
-        "issuedAt": { "type": "integer" }
+        "issuedAt": { "type": "integer" },
+        "expiresAt": { "type": "integer" }
       }
     },
     "commandResult": {

@@ -229,6 +229,10 @@ export class DeviceManager implements GatewayTransportListener {
   }
 
   onTransportError(code: string, message: string): void {
+    if (code === 'AUTH_FAILED') {
+      this.invalidateSession(message);
+      return;
+    }
     this.setError(code, message);
   }
 
@@ -252,8 +256,7 @@ export class DeviceManager implements GatewayTransportListener {
     } catch (error) {
       this.setErrorFromException(error);
       if (this.lastErrorCode === 'AUTH_FAILED') {
-        this.pairingRequired = true;
-        this.connectionState = ConnectionState.DISCONNECTED;
+        this.invalidateSession(this.lastError);
       }
     }
   }
@@ -495,6 +498,9 @@ export class DeviceManager implements GatewayTransportListener {
     } catch (error) {
       this.removePendingDevice(deviceId);
       this.setErrorFromException(error);
+      if (this.lastErrorCode === 'AUTH_FAILED') {
+        this.invalidateSession(this.lastError);
+      }
     }
   }
 
@@ -542,7 +548,7 @@ export class DeviceManager implements GatewayTransportListener {
           });
         }
         if (log.errorCode === 'AUTH_FAILED') {
-          this.pairingRequired = true;
+          this.invalidateSession(this.lastError);
         }
       }
     } else {
@@ -619,6 +625,21 @@ export class DeviceManager implements GatewayTransportListener {
     this.pendingByMessage.clear();
     this.actionByMessage.clear();
     this.pendingDeviceIds = [];
+  }
+
+  private invalidateSession(message: string): void {
+    this.session = null;
+    this.pairingRequired = true;
+    this.gatewayAddress = this.lastGatewayAddress;
+    this.connectionState = ConnectionState.DISCONNECTED;
+    this.clearAllCommandTimeouts();
+    this.setError('AUTH_FAILED', message);
+    if (this.sessionStore !== null) {
+      this.sessionStore.clear().catch((clearError: Error) => {
+      });
+    }
+    this.transport.close().catch((closeError: Error) => {
+    });
   }
 
   private setErrorFromException(error: Object): void {
