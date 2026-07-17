@@ -28,7 +28,7 @@ class GatewayService:
     def __init__(self, config: GatewayConfig) -> None:
         self.config = config
         self.storage = GatewayStorage(config.database)
-        self.sessions = SessionRegistry(config.pairing_code)
+        self.sessions = SessionRegistry(config.initial_pairing_code)
         self.devices = DeviceRegistry(self.storage)
         self._result_cache: dict[
             tuple[str, str], tuple[float, dict[str, Any]]

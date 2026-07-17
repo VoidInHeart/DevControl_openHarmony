@@ -26,7 +26,7 @@ def test_default_device_snapshots_match_shared_schema(tmp_path: Path) -> None:
     gateway = GatewayService(
         GatewayConfig(
             database=tmp_path / "schema.db",
-            pairing_code="123456",
+            initial_pairing_code="123456",
             enable_background_tasks=False,
         )
     )
@@ -59,7 +59,7 @@ def test_gateway_events_match_shared_schema(tmp_path: Path) -> None:
     gateway = GatewayService(
         GatewayConfig(
             database=tmp_path / "events.db",
-            pairing_code="123456",
+            initial_pairing_code="123456",
             enable_background_tasks=False,
         )
     )

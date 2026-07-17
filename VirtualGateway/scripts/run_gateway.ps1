@@ -1,5 +1,5 @@
 param(
-  [string]$PairingCode = "",
+  [string]$InitialPairingCode = "",
   [string]$HostAddress = "0.0.0.0",
   [int]$Port = 8443,
   [int]$AdminPort = 18444,
@@ -18,8 +18,8 @@ if (-not (Test-Path -LiteralPath $env:DEVCONTROL_TLS_CERT) -or
     -not (Test-Path -LiteralPath $env:DEVCONTROL_TLS_KEY)) {
   throw "TLS certificate is missing. Run scripts\generate_demo_certs.ps1 first."
 }
-if ($PairingCode.Length -gt 0) {
-  $env:DEVCONTROL_PAIRING_CODE = $PairingCode
+if ($InitialPairingCode.Length -gt 0) {
+  $env:DEVCONTROL_INITIAL_PAIRING_CODE = $InitialPairingCode
 }
 if ($AdminToken.Length -gt 0) {
   $env:DEVCONTROL_ADMIN_TOKEN = $AdminToken

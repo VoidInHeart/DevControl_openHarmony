@@ -12,6 +12,8 @@ import httpx
 
 GATEWAY_ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = "https://127.0.0.1:8443"
+ADMIN_URL = "http://127.0.0.1:18444"
+ADMIN_TOKEN = "devcontrol-local-admin"
 CA_FILE = GATEWAY_ROOT / "certs" / "demo-ca.crt"
 
 
@@ -48,6 +50,20 @@ def run_script(name: str, *arguments: str) -> None:
     )
 
 
+def get_pairing_code() -> str:
+    response = httpx.get(
+        ADMIN_URL + "/admin/v1/pairing-code",
+        headers={"X-Admin-Token": ADMIN_TOKEN},
+        timeout=2,
+        trust_env=False,
+    )
+    response.raise_for_status()
+    pairing_code = response.json()["pairingCode"]
+    if not isinstance(pairing_code, str):
+        raise TypeError("Maintenance endpoint returned a non-string pairing code")
+    return pairing_code
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--performance-count", type=int, default=1000)
@@ -59,8 +75,7 @@ def main() -> None:
         )
     environment = {
         **os.environ,
-        "DEVCONTROL_PAIRING_CODE": "123456",
-        "DEVCONTROL_ADMIN_TOKEN": "devcontrol-local-admin",
+        "DEVCONTROL_ADMIN_TOKEN": ADMIN_TOKEN,
         "DEVCONTROL_HOST": "127.0.0.1",
         "DEVCONTROL_ADMIN_PORT": "18444",
         "DEVCONTROL_DATABASE": str(GATEWAY_ROOT / "data" / "e2e.db"),
@@ -78,12 +93,20 @@ def main() -> None:
     )
     try:
         wait_until_ready(gateway)
-        run_script("e2e_smoke.py")
-        run_script("security_negative_test.py")
+        run_script(
+            "e2e_smoke.py", "--pairing-code", get_pairing_code()
+        )
+        run_script(
+            "security_negative_test.py",
+            "--pairing-code",
+            get_pairing_code(),
+        )
         run_script(
             "performance_test.py",
             "--count",
             str(args.performance_count),
+            "--pairing-code",
+            get_pairing_code(),
         )
         if args.stability_seconds > 0:
             run_script(
@@ -92,6 +115,8 @@ def main() -> None:
                 str(args.stability_seconds),
                 "--pid",
                 str(gateway.pid),
+                "--pairing-code",
+                get_pairing_code(),
             )
     finally:
         gateway.terminate()

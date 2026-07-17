@@ -24,7 +24,7 @@ from devcontrol_gateway.service import GatewayService
 def make_config(tmp_path: Path) -> GatewayConfig:
     return GatewayConfig(
         database=tmp_path / "gateway.db",
-        pairing_code="123456",
+        initial_pairing_code="123456",
         admin_token="test-admin-token",
         enable_background_tasks=False,
     )
@@ -96,6 +96,32 @@ def test_pairing_rate_limit() -> None:
         registry.pair("source-a", "client-12345678", "000000")
     assert locked.value.code == RATE_LIMITED
     assert locked.value.retry_after_seconds == 600
+
+
+def test_initial_pairing_code_rotates_after_success() -> None:
+    generated_codes = iter(["654321"])
+    registry = SessionRegistry(
+        "123456",
+        pairing_code_factory=lambda: next(generated_codes),
+    )
+    registry.pair("source-a", "client-12345678", "123456")
+    assert registry.pairing_code == "654321"
+    with pytest.raises(Exception) as reused:
+        registry.pair("source-b", "client-87654321", "123456")
+    assert reused.value.code == AUTH_FAILED
+
+
+def test_expired_pairing_code_rotates_without_sleeping() -> None:
+    current_time = [100.0]
+    generated_codes = iter(["654321"])
+    registry = SessionRegistry(
+        "123456",
+        clock=lambda: current_time[0],
+        pairing_code_factory=lambda: next(generated_codes),
+    )
+    assert registry.pairing_expires_in == 300
+    current_time[0] += 301
+    assert registry.pairing_code == "654321"
 
 
 def test_light_command_is_authoritative_and_idempotent(

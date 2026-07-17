@@ -5,6 +5,7 @@ import hashlib
 import json
 import secrets
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidTag
@@ -108,10 +109,21 @@ class SessionRegistry:
     LOCK_SECONDS = 600
     MAX_FAILURES = 5
 
-    def __init__(self, fixed_pairing_code: str | None = None) -> None:
-        self._fixed_pairing_code = fixed_pairing_code
-        self._pairing_code = self._new_pairing_code()
-        self._pairing_expires_at = time.monotonic() + self.PAIRING_LIFETIME_SECONDS
+    def __init__(
+        self,
+        initial_pairing_code: str | None = None,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        pairing_code_factory: Callable[[], str] | None = None,
+    ) -> None:
+        self._clock = clock
+        self._pairing_code_factory = pairing_code_factory or self._random_pairing_code
+        self._pairing_code = (
+            self._validate_pairing_code(initial_pairing_code)
+            if initial_pairing_code is not None
+            else self._new_pairing_code()
+        )
+        self._pairing_expires_at = self._clock() + self.PAIRING_LIFETIME_SECONDS
         self._attempts: dict[str, PairAttempt] = {}
         self._sessions: dict[str, ClientSession] = {}
 
@@ -122,25 +134,32 @@ class SessionRegistry:
 
     @property
     def pairing_expires_in(self) -> int:
-        return max(0, int(self._pairing_expires_at - time.monotonic()))
+        return max(0, int(self._pairing_expires_at - self._clock()))
 
-    def _new_pairing_code(self) -> str:
-        if self._fixed_pairing_code is not None:
-            if (
-                len(self._fixed_pairing_code) != 6
-                or not self._fixed_pairing_code.isdigit()
-            ):
-                raise ValueError("DEVCONTROL_PAIRING_CODE must be six digits")
-            return self._fixed_pairing_code
+    @staticmethod
+    def _random_pairing_code() -> str:
         return f"{secrets.randbelow(1_000_000):06d}"
 
+    @staticmethod
+    def _validate_pairing_code(pairing_code: str) -> str:
+        if len(pairing_code) != 6 or not pairing_code.isdigit():
+            raise ValueError("Pairing code must be six digits")
+        return pairing_code
+
+    def _new_pairing_code(self, previous: str | None = None) -> str:
+        for _ in range(16):
+            candidate = self._validate_pairing_code(self._pairing_code_factory())
+            if candidate != previous:
+                return candidate
+        raise RuntimeError("Pairing-code generator did not rotate the code")
+
     def _rotate_if_expired(self) -> None:
-        if time.monotonic() >= self._pairing_expires_at:
+        if self._clock() >= self._pairing_expires_at:
             self.rotate_pairing_code()
 
     def rotate_pairing_code(self) -> str:
-        self._pairing_code = self._new_pairing_code()
-        self._pairing_expires_at = time.monotonic() + self.PAIRING_LIFETIME_SECONDS
+        self._pairing_code = self._new_pairing_code(self._pairing_code)
+        self._pairing_expires_at = self._clock() + self.PAIRING_LIFETIME_SECONDS
         return self._pairing_code
 
     def pair(
@@ -148,7 +167,7 @@ class SessionRegistry:
     ) -> PairResponse:
         self._rotate_if_expired()
         attempt = self._attempts.setdefault(source, PairAttempt())
-        now = time.monotonic()
+        now = self._clock()
         if attempt.locked_until > now:
             retry_after = max(1, int(attempt.locked_until - now))
             raise GatewayError(
