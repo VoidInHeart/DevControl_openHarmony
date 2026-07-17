@@ -37,6 +37,36 @@ export class DevicePresentation {
   online: boolean = false;
 }
 
+/**
+ * A home feature is a product-level grouping. It is intentionally separate
+ * from rooms: locks belong in the full-home feature list but not in rooms.
+ */
+export class DeviceFeature {
+  id: string = '';
+  title: string = '';
+  icon: string = '';
+  deviceTypes: string[] = [];
+  homeOnly: boolean = false;
+
+  constructor(
+    id: string,
+    title: string,
+    icon: string,
+    deviceTypes: string[],
+    homeOnly: boolean = false
+  ) {
+    this.id = id;
+    this.title = title;
+    this.icon = icon;
+    this.deviceTypes = deviceTypes;
+    this.homeOnly = homeOnly;
+  }
+
+  containsType(type: string): boolean {
+    return this.deviceTypes.indexOf(type) >= 0;
+  }
+}
+
 export class DeviceRegistry {
   private static readonly capabilities: DeviceCapability[] = [
     new DeviceCapability(DeviceType.LIGHT, '灯光', '💡', [
@@ -49,6 +79,16 @@ export class DeviceRegistry {
     new DeviceCapability(DeviceType.DOOR_LOCK, '门锁', '🔒', [
       'lock', 'unlock', 'setAutoLockConfig'
     ])
+  ];
+
+  private static readonly homeFeatures: DeviceFeature[] = [
+    new DeviceFeature('lighting', '灯光', '💡', [DeviceType.LIGHT]),
+    // Curtain support is reserved for gateways that expose a curtain adapter.
+    new DeviceFeature('curtains', '窗帘', '🪟', []),
+    new DeviceFeature('environment', '环境', '🌿', [
+      DeviceType.ENVIRONMENT, DeviceType.AIR_CONDITIONER
+    ]),
+    new DeviceFeature('locks', '门锁', '🔒', [DeviceType.DOOR_LOCK], true)
   ];
 
   static getCapability(type: string): DeviceCapability | null {
@@ -64,6 +104,46 @@ export class DeviceRegistry {
   static supportsAction(type: string, action: string): boolean {
     const capability = DeviceRegistry.getCapability(type);
     return capability !== null && capability.supports(action);
+  }
+
+  static getHomeFeatures(): DeviceFeature[] {
+    return DeviceRegistry.homeFeatures;
+  }
+
+  static getFeature(featureId: string): DeviceFeature | null {
+    for (let index = 0; index < DeviceRegistry.homeFeatures.length; index++) {
+      const feature = DeviceRegistry.homeFeatures[index];
+      if (feature.id === featureId) {
+        return feature;
+      }
+    }
+    return null;
+  }
+
+  static getDevicesByFeature(devices: DeviceInfo[], featureId: string): DeviceInfo[] {
+    const feature = DeviceRegistry.getFeature(featureId);
+    if (feature === null) {
+      return [];
+    }
+    const result: DeviceInfo[] = [];
+    for (let index = 0; index < devices.length; index++) {
+      if (feature.containsType(devices[index].type)) {
+        result.push(devices[index]);
+      }
+    }
+    return result;
+  }
+
+  static getRoomDevices(devices: DeviceInfo[], roomId: string): DeviceInfo[] {
+    const result: DeviceInfo[] = [];
+    for (let index = 0; index < devices.length; index++) {
+      const device = devices[index];
+      const feature = DeviceRegistry.featureForType(device.type);
+      if (device.roomId === roomId && (feature === null || !feature.homeOnly)) {
+        result.push(device);
+      }
+    }
+    return result;
   }
 
   static getRoomIds(devices: DeviceInfo[]): string[] {
@@ -94,6 +174,16 @@ export class DeviceRegistry {
       return '厨房';
     }
     return roomId;
+  }
+
+  private static featureForType(type: string): DeviceFeature | null {
+    for (let index = 0; index < DeviceRegistry.homeFeatures.length; index++) {
+      const feature = DeviceRegistry.homeFeatures[index];
+      if (feature.containsType(type)) {
+        return feature;
+      }
+    }
+    return null;
   }
 
   static present(device: DeviceInfo): DevicePresentation {

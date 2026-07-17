@@ -1,20 +1,24 @@
-import { AccessLogEntry, AlertEntry, DoorLockDevice } from '../model/DeviceModel';
+import { AccessLogEntry, AlertEntry, DeviceType, DoorLockDevice } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
 
 @Component
 export struct DoorLockTab {
   @Consume deviceManager: DeviceManager;
+  @Prop deviceId: string = '';
+  @Prop showTitle: boolean = true;
 
   build() {
     Scroll() {
       Column() {
-        Text('智能门锁')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .width('100%')
-          .margin({ bottom: 12 })
-        ForEach(this.deviceManager.getDoorLocks(), (device: DoorLockDevice) => {
+        if (this.showTitle) {
+          Text('智能门锁')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+            .margin({ bottom: 12 })
+        }
+        ForEach(this.visibleDoorLocks(), (device: DoorLockDevice) => {
           this.DoorCard(device)
           this.AutoLockCard(device)
         }, (device: DoorLockDevice) => device.id + ':' + device.stateVersion.toString())
@@ -25,7 +29,7 @@ export struct DoorLockTab {
       .padding(16)
     }
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
     .scrollBar(BarState.Auto)
   }
 
@@ -272,11 +276,29 @@ export struct DoorLockTab {
     const result: AccessLogEntry[] = [];
     for (let index = 0; index < this.deviceManager.accessLogs.length; index++) {
       const log = this.deviceManager.accessLogs[index];
-      if (log.deviceId === 'door-entry-01') {
+      const device = this.deviceManager.getDeviceById(log.deviceId);
+      if (
+        (this.deviceId.length > 0 && log.deviceId === this.deviceId) ||
+        (this.deviceId.length === 0 && device !== null && device.type === DeviceType.DOOR_LOCK)
+      ) {
         result.push(log);
       }
       if (result.length >= 10) {
         break;
+      }
+    }
+    return result;
+  }
+
+  private visibleDoorLocks(): DoorLockDevice[] {
+    if (this.deviceId.length === 0) {
+      return this.deviceManager.getDoorLocks();
+    }
+    const result: DoorLockDevice[] = [];
+    const devices = this.deviceManager.getDoorLocks();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].id === this.deviceId) {
+        result.push(devices[index]);
       }
     }
     return result;

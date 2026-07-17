@@ -320,13 +320,7 @@ export class DeviceManager implements GatewayTransportListener {
   }
 
   getDevicesByRoom(roomId: string): DeviceInfo[] {
-    const result: DeviceInfo[] = [];
-    for (let index = 0; index < this.devices.length; index++) {
-      if (this.devices[index].roomId === roomId) {
-        result.push(this.devices[index]);
-      }
-    }
-    return result;
+    return DeviceRegistry.getRoomDevices(this.devices, roomId);
   }
 
   getRoomIds(): string[] {

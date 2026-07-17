@@ -1,19 +1,16 @@
 import { router } from '@kit.ArkUI';
-import { DeviceInfo } from '../model/DeviceModel';
+import { DeviceFeature, DeviceRegistry } from '../model/DeviceRegistry';
 import { DeviceManager } from '../model/DeviceManager';
-import { DeviceRegistry } from '../model/DeviceRegistry';
 
 @Component
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
-  @State selectedRoomId: string = 'all';
 
   build() {
     Scroll() {
       Column() {
         this.HomeHeader()
-        this.RoomFilter()
-        this.DeviceSection()
+        this.FeatureSection()
       }
       .width('100%')
     }
@@ -28,8 +25,7 @@ export struct ControlCenterTab {
     Column() {
       Row() {
         Column() {
-          Text(this.selectedRoomId === 'all' ? '我的全屋' :
-            DeviceRegistry.getRoomLabel(this.selectedRoomId))
+          Text('我的全屋')
             .fontSize(28)
             .fontWeight(FontWeight.Bold)
             .fontColor(Color.White)
@@ -40,7 +36,7 @@ export struct ControlCenterTab {
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-        Text('☰')
+        Text('⌂')
           .fontSize(30)
           .fontColor(Color.White)
       }
@@ -58,7 +54,7 @@ export struct ControlCenterTab {
       this.MetricCard('🌡', this.averageTemperature(), '温度')
       this.MetricCard('💧', this.averageHumidity(), '湿度')
       this.MetricCard('💡', this.lightsOnCount().toString(), '亮灯')
-      this.MetricCard('🔒', this.unlockedDoorCount().toString(), '未锁')
+      this.MetricCard('●', this.deviceManager.getOnlineCount().toString(), '在线')
     }
     .width('100%')
     .margin({ top: 22 })
@@ -88,74 +84,30 @@ export struct ControlCenterTab {
   }
 
   @Builder
-  RoomFilter() {
-    Flex({ wrap: FlexWrap.Wrap }) {
-      this.RoomButton('all', '全屋')
-      ForEach(this.deviceManager.getRoomIds(), (roomId: string) => {
-        this.RoomButton(roomId, DeviceRegistry.getRoomLabel(roomId))
-      }, (roomId: string) => roomId)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 16, bottom: 8 })
-  }
-
-  @Builder
-  RoomButton(roomId: string, label: string) {
-    Button(label)
-      .fontSize(14)
-      .fontWeight(roomId === this.selectedRoomId ? FontWeight.Bold : FontWeight.Normal)
-      .fontColor(roomId === this.selectedRoomId ? Color.White : $r('app.color.text_primary'))
-      .backgroundColor(roomId === this.selectedRoomId ? '#197FC7' : Color.White)
-      .borderRadius(18)
-      .margin({ right: 8, bottom: 8 })
-      .padding({ left: 14, right: 14 })
-      .onClick(() => {
-        this.selectedRoomId = roomId;
-      })
-  }
-
-  @Builder
-  DeviceSection() {
+  FeatureSection() {
     Column() {
-      Row() {
-        Text(this.selectedRoomId === 'all' ? '全屋设备' :
-          DeviceRegistry.getRoomLabel(this.selectedRoomId) + '设备')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-        Blank()
-        Text(this.filteredDevices().length.toString() + ' 台设备')
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
+      Text('全屋功能')
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+        .margin({ bottom: 12 })
+      Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
+        ForEach(DeviceRegistry.getHomeFeatures(), (feature: DeviceFeature) => {
+          this.FeatureCard(feature)
+        }, (feature: DeviceFeature) => feature.id)
       }
       .width('100%')
-      .margin({ bottom: 12 })
-
-      if (this.filteredDevices().length === 0) {
-        Text('当前房间暂无已同步设备')
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .padding(32)
-      } else {
-        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
-          ForEach(this.filteredDevices(), (device: DeviceInfo) => {
-            this.DeviceCard(device)
-          }, (device: DeviceInfo) => device.id + ':' + device.stateVersion.toString())
-        }
-        .width('100%')
-      }
     }
     .width('100%')
-    .padding({ left: 16, right: 16, bottom: 28 })
+    .padding({ left: 16, right: 16, top: 20, bottom: 28 })
   }
 
   @Builder
-  DeviceCard(device: DeviceInfo) {
+  FeatureCard(feature: DeviceFeature) {
     Column() {
       Row() {
-        Text(this.deviceIcon(device))
+        Text(feature.icon)
           .fontSize(34)
         Blank()
         Text('›')
@@ -163,63 +115,55 @@ export struct ControlCenterTab {
           .fontColor($r('app.color.text_secondary'))
       }
       .width('100%')
-      Text(device.name)
-        .fontSize(18)
+      Text(feature.title)
+        .fontSize(19)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
         .width('100%')
         .margin({ top: 20 })
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(this.deviceSummary(device))
+      Text(this.featureSummary(feature))
         .fontSize(13)
-        .fontColor(device.online ? $r('app.color.text_secondary') : $r('app.color.status_offline'))
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
         .margin({ top: 6 })
-        .maxLines(1)
+        .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(DeviceRegistry.getRoomLabel(device.roomId))
-        .fontSize(11)
-        .fontColor('#6C9CC0')
-        .width('100%')
-        .margin({ top: 8 })
     }
     .width('48.5%')
-    .height(166)
+    .height(170)
     .padding(16)
     .margin({ bottom: 12 })
     .borderRadius(20)
     .backgroundColor(Color.White)
     .onClick(() => {
-      this.openDevice(device.id);
+      this.openFeature(feature.id);
     })
   }
 
-  private filteredDevices(): DeviceInfo[] {
-    if (this.selectedRoomId === 'all') {
-      return this.deviceManager.devices;
-    }
-    return this.deviceManager.getDevicesByRoom(this.selectedRoomId);
-  }
-
-  private deviceIcon(device: DeviceInfo): string {
-    return DeviceRegistry.present(device).icon;
-  }
-
-  private deviceSummary(device: DeviceInfo): string {
-    return DeviceRegistry.present(device).summary;
-  }
-
-  private openDevice(deviceId: string): void {
+  private openFeature(featureId: string): void {
     router.pushUrl({
-      url: 'pages/DeviceDetail',
-      params: { deviceId: deviceId }
+      url: 'pages/FeatureDevices',
+      params: { featureId: featureId }
     });
   }
 
+  private featureSummary(feature: DeviceFeature): string {
+    const devices = DeviceRegistry.getDevicesByFeature(this.deviceManager.devices, feature.id);
+    if (devices.length === 0) {
+      return feature.id === 'curtains' ? '暂未接入窗帘设备' : '暂无已接入设备';
+    }
+    if (feature.id === 'lighting') {
+      return this.lightsOnCount().toString() + ' 盏已开启 · 共 ' + devices.length.toString() + ' 盏';
+    }
+    if (feature.id === 'locks') {
+      return devices.length.toString() + ' 把门锁 · 全屋安全入口';
+    }
+    return devices.length.toString() + ' 台设备 · 温湿度与空调';
+  }
+
   private headerSubtitle(): string {
-    const online = this.deviceManager.getOnlineCount();
-    return online.toString() + ' 台设备在线 · ' + this.deviceManager.getConnectionLabel();
+    return this.deviceManager.getOnlineCount().toString() + ' 台设备在线 · ' +
+      this.deviceManager.getConnectionLabel();
   }
 
   private averageTemperature(): string {
@@ -251,17 +195,6 @@ export struct ControlCenterTab {
     const lights = this.deviceManager.getLights();
     for (let index = 0; index < lights.length; index++) {
       if (lights[index].state.power) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  private unlockedDoorCount(): number {
-    let count = 0;
-    const doors = this.deviceManager.getDoorLocks();
-    for (let index = 0; index < doors.length; index++) {
-      if (!doors[index].state.locked) {
         count++;
       }
     }

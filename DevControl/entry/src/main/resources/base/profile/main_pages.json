@@ -1,6 +1,8 @@
 {
   "src": [
     "pages/Index",
-    "pages/DeviceDetail"
+    "pages/DeviceDetail",
+    "pages/FeatureDevices",
+    "pages/RoomDevices"
   ]
 }
