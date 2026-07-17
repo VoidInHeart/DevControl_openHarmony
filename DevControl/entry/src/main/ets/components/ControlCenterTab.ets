@@ -76,10 +76,16 @@ export struct ControlCenterTab {
   @Builder
   StatsSection() {
     Row() {
-      this.StatCard(this.deviceManager.getOnlineCount().toString(), '在线设备',
-        $r('app.color.status_online'))
-      this.StatCard(this.deviceManager.getOfflineCount().toString(), '离线设备',
-        $r('app.color.status_offline'))
+      this.StatCard(
+        this.deviceManager.devices.filter((device: DeviceInfo) => device.online).length.toString(),
+        '在线设备',
+        $r('app.color.status_online')
+      )
+      this.StatCard(
+        this.deviceManager.devices.filter((device: DeviceInfo) => !device.online).length.toString(),
+        '离线设备',
+        $r('app.color.status_offline')
+      )
       this.StatCard(this.deviceManager.alerts.length.toString(), '安全告警',
         $r('app.color.status_alert'))
     }
