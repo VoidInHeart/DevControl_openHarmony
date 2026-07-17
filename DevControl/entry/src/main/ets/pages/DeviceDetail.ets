@@ -37,7 +37,7 @@ struct DeviceDetail {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#EAF5FF')
+    .backgroundColor('#DCEAF2')
   }
 
   @Builder
@@ -45,7 +45,7 @@ struct DeviceDetail {
     Row() {
       Text('‹')
         .fontSize(40)
-        .fontColor($r('app.color.text_primary'))
+        .fontColor('#14263A')
         .width(44)
         .height(48)
         .textAlign(TextAlign.Center)
@@ -56,10 +56,10 @@ struct DeviceDetail {
         Text(this.currentTitle())
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .fontColor('#14263A')
         Text(this.currentRoom())
           .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
+          .fontColor('#748294')
           .margin({ top: 2 })
       }
       .alignItems(HorizontalAlign.Start)
@@ -68,7 +68,7 @@ struct DeviceDetail {
     .width('100%')
     .height(64)
     .padding({ left: 8, right: 20 })
-    .backgroundColor(Color.White)
+    .backgroundColor('#DCEAF2')
   }
 
   @Builder

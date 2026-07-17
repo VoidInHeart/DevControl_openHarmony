@@ -11,12 +11,16 @@ export struct LightingTab {
     Scroll() {
       Column() {
         if (this.showTitle) {
-          Text('照明中心')
-            .fontSize(20)
+          Text('灯光')
+            .fontSize(28)
             .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
+            .fontColor('#14263A')
             .width('100%')
-            .margin({ bottom: 16 })
+          Text('调节亮度和自动照明规则')
+            .fontSize(13)
+            .fontColor('#748294')
+            .width('100%')
+            .margin({ top: 6, bottom: 16 })
         }
 
         ForEach(this.visibleLights(), (device: LightDevice) => {
@@ -29,6 +33,7 @@ export struct LightingTab {
     }
     .width('100%')
     .layoutWeight(1)
+    .backgroundColor('#DCEAF2')
     .scrollBar(BarState.Auto)
   }
 
@@ -50,10 +55,14 @@ export struct LightingTab {
   LightCard(device: LightDevice) {
     Column() {
       Row() {
-        Text(device.state.power ? '💡' : '○')
-          .fontSize(32)
-          .fontColor(device.state.power ?
-            $r('app.color.light_icon_on') : $r('app.color.light_icon_off'))
+        Text(device.state.power ? '○' : '○')
+          .fontSize(30)
+          .fontColor(device.state.power ? '#F2B84B' : '#8AA0B6')
+          .width(56)
+          .height(56)
+          .textAlign(TextAlign.Center)
+          .backgroundColor(device.state.power ? '#FFF4D8' : '#EEF5FB')
+          .borderRadius(20)
           .opacity(this.getLightIconOpacity(device.state.power, device.state.brightness))
         Column() {
           Text(device.name)
@@ -120,8 +129,8 @@ export struct LightingTab {
     }
     .width('100%')
     .padding(16)
-    .borderRadius(16)
-    .backgroundColor($r('app.color.card_background'))
+    .borderRadius(24)
+    .backgroundColor('#F7FBFF')
     .margin({ bottom: 12 })
   }
 
@@ -134,7 +143,7 @@ export struct LightingTab {
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
-          Text('手动控制后由网关保留5分钟优先权')
+          Text('手动控制后，网关会保留一段优先时间')
             .fontSize(12)
             .fontColor($r('app.color.text_secondary'))
             .margin({ top: 4 })
@@ -222,8 +231,8 @@ export struct LightingTab {
     }
     .width('100%')
     .padding(16)
-    .borderRadius(16)
-    .backgroundColor($r('app.color.card_background'))
+    .borderRadius(24)
+    .backgroundColor('#F7FBFF')
   }
 
   private canControl(device: LightDevice): boolean {
