@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { DeviceManager } from '../model/DeviceManager';
+import { DeviceApplication } from '../model/DeviceApplication';
 import { ControlCenterTab } from '../components/ControlCenterTab';
 import { LightingTab } from '../components/LightingTab';
 import { TemperatureTab } from '../components/TemperatureTab';
@@ -10,7 +11,7 @@ import { SettingsTab } from '../components/SettingsTab';
 @Entry
 @Component
 struct Index {
-  @Provide deviceManager: DeviceManager = new DeviceManager();
+  @Provide deviceManager: DeviceManager = DeviceApplication.getDeviceManager();
   @State currentTab: number = 0;
 
   aboutToAppear(): void {

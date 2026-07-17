@@ -1,291 +1,270 @@
-import {
-  AirConditionerDevice,
-  DeviceInfo,
-  DeviceType,
-  DoorLockDevice,
-  EnvironmentDevice,
-  LightDevice,
-  SceneExecutionDetail
-} from '../model/DeviceModel';
+import { router } from '@kit.ArkUI';
+import { DeviceInfo } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { DeviceRegistry } from '../model/DeviceRegistry';
 
 @Component
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
+  @State selectedRoomId: string = 'all';
 
   build() {
     Scroll() {
       Column() {
-        this.ConnectionSection()
-        this.StatsSection()
-        this.SceneSection()
-        this.DeviceListSection()
+        this.HomeHeader()
+        this.RoomFilter()
+        this.DeviceSection()
       }
       .width('100%')
-      .padding(16)
     }
     .width('100%')
     .height('100%')
+    .backgroundColor('#EAF5FF')
     .scrollBar(BarState.Auto)
   }
 
   @Builder
-  ConnectionSection() {
+  HomeHeader() {
     Column() {
       Row() {
-        Text(this.deviceManager.isOnline() ? '●' : '●')
-          .fontSize(12)
-          .fontColor(this.deviceManager.isOnline() ?
-            $r('app.color.status_online') : $r('app.color.status_offline'))
-        Text('网关' + this.deviceManager.getConnectionLabel())
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ left: 8 })
-        Blank()
-        if (this.deviceManager.connectionState === 'reconnecting') {
-          Text('自动重连中')
-            .fontSize(12)
-            .fontColor($r('app.color.status_warning'))
+        Column() {
+          Text(this.selectedRoomId === 'all' ? '我的全屋' :
+            DeviceRegistry.getRoomLabel(this.selectedRoomId))
+            .fontSize(28)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+          Text(this.headerSubtitle())
+            .fontSize(13)
+            .fontColor('#CDEBFF')
+            .margin({ top: 6 })
         }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text('☰')
+          .fontSize(30)
+          .fontColor(Color.White)
       }
       .width('100%')
-
-      if (!this.deviceManager.isOnline()) {
-        Text('当前展示最后一次同步快照，所有控制操作已禁用。')
-          .fontSize(12)
-          .fontColor($r('app.color.status_warning'))
-          .width('100%')
-          .margin({ top: 8 })
-      }
-      if (this.deviceManager.lastError.length > 0) {
-        Text(this.deviceManager.lastErrorCode + ' · ' + this.deviceManager.lastError)
-          .fontSize(12)
-          .fontColor($r('app.color.status_alert'))
-          .width('100%')
-          .margin({ top: 8 })
-      }
+      this.MetricRow()
     }
     .width('100%')
-    .padding(16)
-    .borderRadius(12)
-    .backgroundColor($r('app.color.card_background'))
-    .margin({ bottom: 16 })
+    .padding({ left: 20, right: 20, top: 28, bottom: 22 })
+    .backgroundColor('#197FC7')
   }
 
   @Builder
-  StatsSection() {
+  MetricRow() {
     Row() {
-      this.StatCard(
-        this.deviceManager.devices.filter((device: DeviceInfo) => device.online).length.toString(),
-        '在线设备',
-        $r('app.color.status_online')
-      )
-      this.StatCard(
-        this.deviceManager.devices.filter((device: DeviceInfo) => !device.online).length.toString(),
-        '离线设备',
-        $r('app.color.status_offline')
-      )
-      this.StatCard(this.deviceManager.alerts.length.toString(), '安全告警',
-        $r('app.color.status_alert'))
+      this.MetricCard('🌡', this.averageTemperature(), '温度')
+      this.MetricCard('💧', this.averageHumidity(), '湿度')
+      this.MetricCard('💡', this.lightsOnCount().toString(), '亮灯')
+      this.MetricCard('🔒', this.unlockedDoorCount().toString(), '未锁')
     }
     .width('100%')
-    .margin({ bottom: 16 })
+    .margin({ top: 22 })
+    .justifyContent(FlexAlign.SpaceBetween)
   }
 
   @Builder
-  StatCard(value: string, label: string, color: Resource) {
+  MetricCard(icon: string, value: string, label: string) {
     Column() {
+      Text(icon)
+        .fontSize(22)
       Text(value)
-        .fontSize(26)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(color)
+        .fontSize(18)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Color.White)
+        .margin({ top: 4 })
       Text(label)
         .fontSize(11)
-        .fontColor($r('app.color.text_secondary'))
-        .margin({ top: 4 })
+        .fontColor('#CDEBFF')
+        .margin({ top: 2 })
     }
-    .layoutWeight(1)
-    .padding({ top: 14, bottom: 14 })
-    .borderRadius(12)
-    .backgroundColor($r('app.color.card_background'))
+    .width('23%')
+    .padding({ top: 10, bottom: 10 })
+    .borderRadius(16)
+    .backgroundColor('#287FBA')
     .alignItems(HorizontalAlign.Center)
-    .margin({ left: 3, right: 3 })
   }
 
   @Builder
-  SceneSection() {
-    Column() {
-      Text('快捷场景')
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
-      Text('在家模式开启灯光和空调；离家模式关闭设备并锁定入户门。')
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .width('100%')
-        .margin({ top: 6, bottom: 12 })
-      Row() {
-        Button(this.deviceManager.isDevicePending('scene-home') ? '正在执行…' : '在家模式')
-          .layoutWeight(1)
-          .enabled(this.canExecuteScene())
-          .opacity(this.canExecuteScene() ? 1 : 0.45)
-          .margin({ right: 4 })
-          .onClick(() => {
-            this.deviceManager.executeHomeScene();
-          })
-        Button(this.deviceManager.isDevicePending('scene-away') ? '正在执行…' : '离家模式')
-          .layoutWeight(1)
-          .enabled(this.canExecuteScene())
-          .opacity(this.canExecuteScene() ? 1 : 0.45)
-          .margin({ left: 4 })
-          .onClick(() => {
-            this.deviceManager.executeAwayScene();
-          })
-      }
-        .width('100%')
-      if (this.deviceManager.sceneResults.length > 0) {
-        Column() {
-          ForEach(this.deviceManager.sceneResults, (item: SceneExecutionDetail) => {
-            Row() {
-              Text(this.sceneDeviceName(item.deviceId))
-                .fontSize(12)
-                .fontColor($r('app.color.text_secondary'))
-                .layoutWeight(1)
-              Text(item.success ? '成功' : '失败 ' + item.errorCode)
-                .fontSize(12)
-                .fontColor(item.success ?
-                  $r('app.color.status_online') : $r('app.color.status_alert'))
-            }
-            .width('100%')
-            .margin({ top: 8 })
-          }, (item: SceneExecutionDetail) => item.deviceId)
-        }
-        .width('100%')
-        .margin({ top: 8 })
-      }
+  RoomFilter() {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      this.RoomButton('all', '全屋')
+      ForEach(this.deviceManager.getRoomIds(), (roomId: string) => {
+        this.RoomButton(roomId, DeviceRegistry.getRoomLabel(roomId))
+      }, (roomId: string) => roomId)
     }
     .width('100%')
-    .padding(16)
-    .borderRadius(12)
-    .backgroundColor($r('app.color.card_background'))
-    .margin({ bottom: 16 })
+    .padding({ left: 16, right: 16, top: 16, bottom: 8 })
   }
 
   @Builder
-  DeviceListSection() {
-    Column() {
-      Text('全部设备')
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
-        .margin({ bottom: 12 })
+  RoomButton(roomId: string, label: string) {
+    Button(label)
+      .fontSize(14)
+      .fontWeight(roomId === this.selectedRoomId ? FontWeight.Bold : FontWeight.Normal)
+      .fontColor(roomId === this.selectedRoomId ? Color.White : $r('app.color.text_primary'))
+      .backgroundColor(roomId === this.selectedRoomId ? '#197FC7' : Color.White)
+      .borderRadius(18)
+      .margin({ right: 8, bottom: 8 })
+      .padding({ left: 14, right: 14 })
+      .onClick(() => {
+        this.selectedRoomId = roomId;
+      })
+  }
 
-      if (this.deviceManager.devices.length === 0) {
-        Text('正在等待网关设备快照…')
+  @Builder
+  DeviceSection() {
+    Column() {
+      Row() {
+        Text(this.selectedRoomId === 'all' ? '全屋设备' :
+          DeviceRegistry.getRoomLabel(this.selectedRoomId) + '设备')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+        Blank()
+        Text(this.filteredDevices().length.toString() + ' 台设备')
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+      }
+      .width('100%')
+      .margin({ bottom: 12 })
+
+      if (this.filteredDevices().length === 0) {
+        Text('当前房间暂无已同步设备')
           .fontSize(14)
           .fontColor($r('app.color.text_secondary'))
           .width('100%')
           .textAlign(TextAlign.Center)
-          .padding(24)
+          .padding(32)
       } else {
-        ForEach(this.deviceManager.devices, (device: DeviceInfo) => {
-          Row() {
-            Column() {
-              Text(this.getDeviceIcon(device))
-                .fontSize(26)
-            }
-            .width(44)
-            .height(44)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
-            Column() {
-              Text(device.name)
-                .fontSize(15)
-                .fontColor($r('app.color.text_primary'))
-              Text(device.online ? '在线' : '离线')
-                .fontSize(12)
-                .fontColor(device.online ?
-                  $r('app.color.status_online') : $r('app.color.status_offline'))
-                .margin({ top: 2 })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .justifyContent(FlexAlign.Center)
-            .height(44)
-            .layoutWeight(1)
-            .margin({ left: 8 })
-            Column() {
-              Text(this.getDeviceStatusText(device))
-                .fontSize(13)
-                .fontColor($r('app.color.text_secondary'))
-              if (this.deviceManager.isDevicePending(device.id)) {
-                Text('处理中')
-                  .fontSize(11)
-                  .fontColor($r('app.color.status_warning'))
-                  .margin({ top: 2 })
-              }
-            }
-            .alignItems(HorizontalAlign.End)
-            .justifyContent(FlexAlign.Center)
-            .height(44)
-          }
-          .width('100%')
-          .padding(12)
-          .borderRadius(8)
-          .backgroundColor($r('app.color.card_background'))
-          .margin({ bottom: 6 })
-          .alignItems(VerticalAlign.Center)
-        }, (device: DeviceInfo) => device.id + ':' + device.stateVersion.toString())
+        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
+          ForEach(this.filteredDevices(), (device: DeviceInfo) => {
+            this.DeviceCard(device)
+          }, (device: DeviceInfo) => device.id + ':' + device.stateVersion.toString())
+        }
+        .width('100%')
       }
     }
     .width('100%')
+    .padding({ left: 16, right: 16, bottom: 28 })
   }
 
-  private getDeviceIcon(device: DeviceInfo): string {
-    if (device.type === DeviceType.DOOR_LOCK) {
-      return (device as DoorLockDevice).state.locked ? '🔒' : '🔓';
+  @Builder
+  DeviceCard(device: DeviceInfo) {
+    Column() {
+      Row() {
+        Text(this.deviceIcon(device))
+          .fontSize(34)
+        Blank()
+        Text('›')
+          .fontSize(30)
+          .fontColor($r('app.color.text_secondary'))
+      }
+      .width('100%')
+      Text(device.name)
+        .fontSize(18)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+        .margin({ top: 20 })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(this.deviceSummary(device))
+        .fontSize(13)
+        .fontColor(device.online ? $r('app.color.text_secondary') : $r('app.color.status_offline'))
+        .width('100%')
+        .margin({ top: 6 })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(DeviceRegistry.getRoomLabel(device.roomId))
+        .fontSize(11)
+        .fontColor('#6C9CC0')
+        .width('100%')
+        .margin({ top: 8 })
     }
-    if (device.type === DeviceType.LIGHT) {
-      return (device as LightDevice).state.power ? '💡' : '○';
-    }
-    if (device.type === DeviceType.ENVIRONMENT) {
-      return '🌡';
-    }
-    if (device.type === DeviceType.AIR_CONDITIONER) {
-      return (device as AirConditionerDevice).state.power ? '❄' : '⏻';
-    }
-    return '□';
+    .width('48.5%')
+    .height(166)
+    .padding(16)
+    .margin({ bottom: 12 })
+    .borderRadius(20)
+    .backgroundColor(Color.White)
+    .onClick(() => {
+      this.openDevice(device.id);
+    })
   }
 
-  private getDeviceStatusText(device: DeviceInfo): string {
-    if (device.type === DeviceType.DOOR_LOCK) {
-      const door = device as DoorLockDevice;
-      return door.state.jammed ? '卡滞' : (door.state.locked ? '已锁定' : '已解锁');
+  private filteredDevices(): DeviceInfo[] {
+    if (this.selectedRoomId === 'all') {
+      return this.deviceManager.devices;
     }
-    if (device.type === DeviceType.LIGHT) {
-      const light = device as LightDevice;
-      return light.state.power ? '开启 ' + light.state.brightness.toFixed(0) + '%' : '关闭';
-    }
-    if (device.type === DeviceType.ENVIRONMENT) {
-      const environment = device as EnvironmentDevice;
-      return environment.state.temperatureCelsius.toFixed(1) + '°C / ' +
-        environment.state.humidityPercent.toFixed(0) + '%';
-    }
-    const ac = device as AirConditionerDevice;
-    return ac.state.power ? ac.state.mode + ' · ' +
-      ac.state.targetTemperatureCelsius.toFixed(0) + '°C' : '关闭';
+    return this.deviceManager.getDevicesByRoom(this.selectedRoomId);
   }
 
-  private sceneDeviceName(deviceId: string): string {
-    const device = this.deviceManager.getDeviceById(deviceId);
-    return device === null ? deviceId : device.name;
+  private deviceIcon(device: DeviceInfo): string {
+    return DeviceRegistry.present(device).icon;
   }
 
-  private canExecuteScene(): boolean {
-    return this.deviceManager.isOnline() &&
-      !this.deviceManager.isDevicePending('scene-home') &&
-      !this.deviceManager.isDevicePending('scene-away');
+  private deviceSummary(device: DeviceInfo): string {
+    return DeviceRegistry.present(device).summary;
+  }
+
+  private openDevice(deviceId: string): void {
+    router.pushUrl({
+      url: 'pages/DeviceDetail',
+      params: { deviceId: deviceId }
+    });
+  }
+
+  private headerSubtitle(): string {
+    const online = this.deviceManager.getOnlineCount();
+    return online.toString() + ' 台设备在线 · ' + this.deviceManager.getConnectionLabel();
+  }
+
+  private averageTemperature(): string {
+    const sensors = this.deviceManager.getEnvironmentDevices();
+    if (sensors.length === 0) {
+      return '--';
+    }
+    let total = 0;
+    for (let index = 0; index < sensors.length; index++) {
+      total += sensors[index].state.temperatureCelsius;
+    }
+    return (total / sensors.length).toFixed(1) + '°';
+  }
+
+  private averageHumidity(): string {
+    const sensors = this.deviceManager.getEnvironmentDevices();
+    if (sensors.length === 0) {
+      return '--';
+    }
+    let total = 0;
+    for (let index = 0; index < sensors.length; index++) {
+      total += sensors[index].state.humidityPercent;
+    }
+    return (total / sensors.length).toFixed(0) + '%';
+  }
+
+  private lightsOnCount(): number {
+    let count = 0;
+    const lights = this.deviceManager.getLights();
+    for (let index = 0; index < lights.length; index++) {
+      if (lights[index].state.power) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  private unlockedDoorCount(): number {
+    let count = 0;
+    const doors = this.deviceManager.getDoorLocks();
+    for (let index = 0; index < doors.length; index++) {
+      if (!doors[index].state.locked) {
+        count++;
+      }
+    }
+    return count;
   }
 }
