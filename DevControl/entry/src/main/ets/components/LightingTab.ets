@@ -77,15 +77,18 @@ export struct LightingTab {
           value: device.state.brightness,
           min: 0,
           max: 100,
-          step: 1,
+          step: 10,
           style: SliderStyle.OutSet
         })
           .layoutWeight(1)
           .enabled(this.canControl(device))
+          .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
           .trackColor($r('app.color.divider'))
           .selectedColor($r('app.color.primary'))
-          .onChange((value: number) => {
-            this.deviceManager.setLightBrightness(device, value);
+          .onChange((value: number, mode: SliderChangeMode) => {
+            if (this.shouldCommitSlider(mode)) {
+              this.deviceManager.setLightBrightness(device, value);
+            }
           })
         Text(device.state.brightness.toFixed(0) + '%')
           .fontSize(14)
@@ -147,13 +150,16 @@ export struct LightingTab {
         })
           .layoutWeight(1)
           .enabled(this.canControl(device))
-          .onChange((value: number) => {
-            this.deviceManager.setLightAutomation(
-              device,
-              device.state.automation.enabled,
-              value,
-              device.state.automation.noPresenceDelaySeconds
-            );
+          .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+          .onChange((value: number, mode: SliderChangeMode) => {
+            if (this.shouldCommitSlider(mode)) {
+              this.deviceManager.setLightAutomation(
+                device,
+                device.state.automation.enabled,
+                value,
+                device.state.automation.noPresenceDelaySeconds
+              );
+            }
           })
         Text(device.state.automation.illuminanceThresholdLux.toFixed(0) + ' lx')
           .fontSize(12)
@@ -177,13 +183,16 @@ export struct LightingTab {
         })
           .layoutWeight(1)
           .enabled(this.canControl(device))
-          .onChange((value: number) => {
-            this.deviceManager.setLightAutomation(
-              device,
-              device.state.automation.enabled,
-              device.state.automation.illuminanceThresholdLux,
-              value
-            );
+          .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+          .onChange((value: number, mode: SliderChangeMode) => {
+            if (this.shouldCommitSlider(mode)) {
+              this.deviceManager.setLightAutomation(
+                device,
+                device.state.automation.enabled,
+                device.state.automation.illuminanceThresholdLux,
+                value
+              );
+            }
           })
         Text(device.state.automation.noPresenceDelaySeconds.toFixed(0) + ' 秒')
           .fontSize(12)
@@ -202,6 +211,10 @@ export struct LightingTab {
   private canControl(device: LightDevice): boolean {
     return this.deviceManager.isOnline() && device.online &&
       !this.deviceManager.isDevicePending(device.id);
+  }
+
+  private shouldCommitSlider(mode: SliderChangeMode): boolean {
+    return mode === SliderChangeMode.End || mode === SliderChangeMode.Click;
   }
 
   private getLightIconOpacity(isOn: boolean, brightness: number): number {

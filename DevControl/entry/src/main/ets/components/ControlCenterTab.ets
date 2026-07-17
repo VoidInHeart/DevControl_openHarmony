@@ -187,8 +187,14 @@ export struct ControlCenterTab {
       } else {
         ForEach(this.deviceManager.devices, (device: DeviceInfo) => {
           Row() {
-            Text(this.getDeviceIcon(device))
-              .fontSize(26)
+            Column() {
+              Text(this.getDeviceIcon(device))
+                .fontSize(26)
+            }
+            .width(44)
+            .height(44)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
             Column() {
               Text(device.name)
                 .fontSize(15)
@@ -200,8 +206,10 @@ export struct ControlCenterTab {
                 .margin({ top: 2 })
             }
             .alignItems(HorizontalAlign.Start)
+            .justifyContent(FlexAlign.Center)
+            .height(44)
             .layoutWeight(1)
-            .margin({ left: 12 })
+            .margin({ left: 8 })
             Column() {
               Text(this.getDeviceStatusText(device))
                 .fontSize(13)
@@ -214,6 +222,8 @@ export struct ControlCenterTab {
               }
             }
             .alignItems(HorizontalAlign.End)
+            .justifyContent(FlexAlign.Center)
+            .height(44)
           }
           .width('100%')
           .padding(12)

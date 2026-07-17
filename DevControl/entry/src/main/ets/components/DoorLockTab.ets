@@ -150,8 +150,11 @@ export struct DoorLockTab {
         })
           .layoutWeight(1)
           .enabled(this.canControl(device))
-          .onChange((value: number) => {
-            this.deviceManager.setDoorAutoLock(device, device.state.autoLockEnabled, value);
+          .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+          .onChange((value: number, mode: SliderChangeMode) => {
+            if (this.shouldCommitSlider(mode)) {
+              this.deviceManager.setDoorAutoLock(device, device.state.autoLockEnabled, value);
+            }
           })
         Text(device.state.autoLockDelaySeconds.toFixed(0) + ' 秒')
           .fontSize(12)
@@ -259,6 +262,10 @@ export struct DoorLockTab {
   private canControl(device: DoorLockDevice): boolean {
     return this.deviceManager.isOnline() && device.online && !device.state.jammed &&
       !this.deviceManager.isDevicePending(device.id);
+  }
+
+  private shouldCommitSlider(mode: SliderChangeMode): boolean {
+    return mode === SliderChangeMode.End || mode === SliderChangeMode.Click;
   }
 
   private doorLogs(): AccessLogEntry[] {

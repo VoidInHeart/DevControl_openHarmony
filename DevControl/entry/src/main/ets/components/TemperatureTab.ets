@@ -184,8 +184,11 @@ export struct TemperatureTab {
       })
         .width('100%')
         .enabled(this.canControl(device))
-        .onChange((value: number) => {
-          this.deviceManager.setAcTemperature(device, value);
+        .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+        .onChange((value: number, mode: SliderChangeMode) => {
+          if (this.shouldCommitSlider(mode)) {
+            this.deviceManager.setAcTemperature(device, value);
+          }
         })
 
       Text('运行模式')
@@ -260,6 +263,10 @@ export struct TemperatureTab {
   private canControl(device: AirConditionerDevice): boolean {
     return this.deviceManager.isOnline() && device.online &&
       !this.deviceManager.isDevicePending(device.id);
+  }
+
+  private shouldCommitSlider(mode: SliderChangeMode): boolean {
+    return mode === SliderChangeMode.End || mode === SliderChangeMode.Click;
   }
 
   private brandLabel(brand: string): string {
