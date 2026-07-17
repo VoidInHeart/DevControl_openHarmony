@@ -11,7 +11,6 @@ function makeLightSnapshot(): Record<string, Object> {
   automation['enabled'] = true;
   automation['illuminanceThresholdLux'] = 90;
   automation['noPresenceDelaySeconds'] = 30;
-  automation['manualOverrideUntil'] = null;
 
   const raw: Record<string, Object> = {};
   raw['id'] = 'light-living-01';
