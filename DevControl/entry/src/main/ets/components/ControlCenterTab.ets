@@ -115,18 +115,30 @@ export struct ControlCenterTab {
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
         .width('100%')
-      Text('离家模式将关闭灯光和空调，并锁定入户门锁。')
+      Text('在家模式开启灯光和空调；离家模式关闭设备并锁定入户门。')
         .fontSize(12)
         .fontColor($r('app.color.text_secondary'))
         .width('100%')
         .margin({ top: 6, bottom: 12 })
-      Button(this.deviceManager.isDevicePending('scene-away') ? '正在执行离家模式…' : '执行离家模式')
+      Row() {
+        Button(this.deviceManager.isDevicePending('scene-home') ? '正在执行…' : '在家模式')
+          .layoutWeight(1)
+          .enabled(this.canExecuteScene())
+          .opacity(this.canExecuteScene() ? 1 : 0.45)
+          .margin({ right: 4 })
+          .onClick(() => {
+            this.deviceManager.executeHomeScene();
+          })
+        Button(this.deviceManager.isDevicePending('scene-away') ? '正在执行…' : '离家模式')
+          .layoutWeight(1)
+          .enabled(this.canExecuteScene())
+          .opacity(this.canExecuteScene() ? 1 : 0.45)
+          .margin({ left: 4 })
+          .onClick(() => {
+            this.deviceManager.executeAwayScene();
+          })
+      }
         .width('100%')
-        .enabled(this.deviceManager.isOnline() && !this.deviceManager.isDevicePending('scene-away'))
-        .opacity(this.deviceManager.isOnline() ? 1 : 0.45)
-        .onClick(() => {
-          this.deviceManager.executeAwayScene();
-        })
       if (this.deviceManager.sceneResults.length > 0) {
         Column() {
           ForEach(this.deviceManager.sceneResults, (item: SceneExecutionDetail) => {
@@ -253,5 +265,11 @@ export struct ControlCenterTab {
   private sceneDeviceName(deviceId: string): string {
     const device = this.deviceManager.getDeviceById(deviceId);
     return device === null ? deviceId : device.name;
+  }
+
+  private canExecuteScene(): boolean {
+    return this.deviceManager.isOnline() &&
+      !this.deviceManager.isDevicePending('scene-home') &&
+      !this.deviceManager.isDevicePending('scene-away');
   }
 }

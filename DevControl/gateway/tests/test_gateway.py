@@ -201,6 +201,37 @@ def test_away_scene_returns_per_device_results(
     assert service.devices.get("door-entry-01")["locked"] is True
 
 
+def test_home_scene_returns_per_device_results(
+    service: GatewayService,
+) -> None:
+    _, session = pair(service)
+    service.devices.get("light-living-01")["power"] = False
+    service.devices.get("ac-living-01").update(
+        {"power": False, "mode": "heat", "targetTemperatureCelsius": 30}
+    )
+    service.devices.get("door-entry-01")["locked"] = False
+    envelope = command(
+        session,
+        device_id="scene-home",
+        action="executeHome",
+        expected_version=None,
+        payload={},
+    )
+    result, events = process(service, session, envelope)
+    assert result["success"] is True
+    assert len(result["details"]) == 3
+    assert all(item["success"] for item in result["details"])
+    assert len(events) == 3
+    light = service.devices.get("light-living-01")
+    ac = service.devices.get("ac-living-01")
+    assert light["power"] is True
+    assert light["brightness"] == 70
+    assert ac["power"] is True
+    assert ac["mode"] == "auto"
+    assert ac["targetTemperatureCelsius"] == 24
+    assert service.devices.get("door-entry-01")["locked"] is True
+
+
 def test_automation_ac_and_door_behaviour(service: GatewayService) -> None:
     _, session = pair(service)
     light = service.devices.get("light-living-01")
@@ -323,4 +354,3 @@ def test_rest_and_websocket_contract(tmp_path: Path) -> None:
         logs = client.get("/api/v1/logs", headers=headers)
         assert logs.status_code == 200
         assert logs.json()["items"]
-

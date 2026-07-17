@@ -158,6 +158,10 @@ class DeviceRegistry:
             if action != "executeAway":
                 raise GatewayError(INVALID_COMMAND, "场景动作不受支持")
             return None, self._execute_away()
+        if device_id == "scene-home":
+            if action != "executeHome":
+                raise GatewayError(INVALID_COMMAND, "场景动作不受支持")
+            return None, self._execute_home()
 
         device = self.get(device_id)
         self._ensure_commandable(device, expected_version)
@@ -310,22 +314,46 @@ class DeviceRegistry:
         self._touch(device)
 
     def _execute_away(self) -> list[dict[str, object]]:
-        results: list[dict[str, object]] = []
         actions = (
-            ("light-living-01", "setPower", {"power": False}),
-            ("ac-living-01", "setPower", {"power": False}),
-            ("door-entry-01", "lock", {}),
+            ("light-living-01", (("setPower", {"power": False}),)),
+            ("ac-living-01", (("setPower", {"power": False}),)),
+            ("door-entry-01", (("lock", {}),)),
         )
-        for device_id, action, payload in actions:
+        return self._execute_scene_actions(actions)
+
+    def _execute_home(self) -> list[dict[str, object]]:
+        actions = (
+            ("light-living-01", (("setBrightness", {"brightness": 70}),)),
+            (
+                "ac-living-01",
+                (
+                    ("setMode", {"mode": "auto"}),
+                    ("setTemperature", {"temperatureCelsius": 24}),
+                    ("setPower", {"power": True}),
+                ),
+            ),
+            ("door-entry-01", (("lock", {}),)),
+        )
+        return self._execute_scene_actions(actions)
+
+    def _execute_scene_actions(
+        self,
+        actions: tuple[
+            tuple[str, tuple[tuple[str, dict[str, object]], ...]], ...
+        ],
+    ) -> list[dict[str, object]]:
+        results: list[dict[str, object]] = []
+        for device_id, device_actions in actions:
             try:
                 device = self.get(device_id)
                 self._ensure_commandable(device, device["stateVersion"])
-                if device["type"] == "light":
-                    self._execute_light(device, action, payload)
-                elif device["type"] == "airConditioner":
-                    self._execute_ac(device, action, payload)
-                else:
-                    self._execute_door(device, action, payload)
+                for action, payload in device_actions:
+                    if device["type"] == "light":
+                        self._execute_light(device, action, payload)
+                    elif device["type"] == "airConditioner":
+                        self._execute_ac(device, action, payload)
+                    else:
+                        self._execute_door(device, action, payload)
                 results.append(
                     {"deviceId": device_id, "success": True, "errorCode": None}
                 )

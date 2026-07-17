@@ -418,6 +418,10 @@ export class DeviceManager implements GatewayTransportListener {
     await this.submitRaw('scene-away', 'executeAway', null, new CommandPayload());
   }
 
+  async executeHomeScene(): Promise<void> {
+    await this.submitRaw('scene-home', 'executeHome', null, new CommandPayload());
+  }
+
   private async connectAndSync(): Promise<void> {
     await this.transport.connect(this);
     await this.refreshAll();
@@ -492,7 +496,7 @@ export class DeviceManager implements GatewayTransportListener {
     const action = message['action'] as string;
     const success = message['success'] as boolean;
     this.finishPending(messageId);
-    if (deviceId === 'scene-away') {
+    if (this.isSceneCommand(deviceId)) {
       this.sceneResults = this.parseSceneResults(message['details']);
     }
     const log = new AccessLogEntry();
@@ -519,7 +523,7 @@ export class DeviceManager implements GatewayTransportListener {
       this.lastErrorCode = '';
     }
     this.accessLogs = [log, ...this.accessLogs].slice(0, 50);
-    if (deviceId === 'scene-away' && success) {
+    if (this.isSceneCommand(deviceId) && success) {
       this.refreshAll().catch((error: Error) => {
         this.setErrorFromException(error);
       });
@@ -558,6 +562,10 @@ export class DeviceManager implements GatewayTransportListener {
       result.push(detail);
     }
     return result;
+  }
+
+  private isSceneCommand(deviceId: string): boolean {
+    return deviceId === 'scene-away' || deviceId === 'scene-home';
   }
 
   private finishPending(messageId: string): void {

@@ -130,9 +130,14 @@ bool ProtocolCore::Crypt(bool encrypt, const std::vector<uint8_t> &key,
     OH_CryptoSymKey *keyContext = nullptr;
     OH_CryptoSymCipherParams *params = nullptr;
     OH_CryptoSymCipher *cipher = nullptr;
+    Crypto_DataBlob updateOutput{nullptr, 0};
     Crypto_DataBlob finalOutput{nullptr, 0};
 
     auto cleanup = [&]() {
+        if (updateOutput.data != nullptr) {
+            OH_Crypto_FreeDataBlob(&updateOutput);
+            updateOutput = {nullptr, 0};
+        }
         if (finalOutput.data != nullptr) {
             OH_Crypto_FreeDataBlob(&finalOutput);
             finalOutput = {nullptr, 0};
@@ -197,12 +202,30 @@ bool ProtocolCore::Crypt(bool encrypt, const std::vector<uint8_t> &key,
         return false;
     }
     Crypto_DataBlob inputBlob{const_cast<uint8_t *>(input.data()), input.size()};
-    if (OH_CryptoSymCipher_Final(cipher, &inputBlob, &finalOutput) !=
+    if (OH_CryptoSymCipher_Update(cipher, &inputBlob, &updateOutput) !=
         CRYPTO_SUCCESS) {
         cleanup();
         return false;
     }
-    output.assign(finalOutput.data, finalOutput.data + finalOutput.len);
+    if (OH_CryptoSymCipher_Final(cipher, nullptr, &finalOutput) !=
+        CRYPTO_SUCCESS) {
+        cleanup();
+        return false;
+    }
+    if (encrypt) {
+        if (finalOutput.data == nullptr || finalOutput.len != 16) {
+            cleanup();
+            return false;
+        }
+        tag.assign(finalOutput.data, finalOutput.data + finalOutput.len);
+    }
+    output.clear();
+    if (updateOutput.data != nullptr && updateOutput.len > 0) {
+        output.assign(updateOutput.data, updateOutput.data + updateOutput.len);
+    }
+    if (!encrypt && finalOutput.data != nullptr && finalOutput.len > 0) {
+        output.insert(output.end(), finalOutput.data, finalOutput.data + finalOutput.len);
+    }
     cleanup();
     return true;
 }
