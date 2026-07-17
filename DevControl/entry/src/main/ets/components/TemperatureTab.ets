@@ -10,13 +10,17 @@ import { DeviceManager } from '../model/DeviceManager';
 @Component
 export struct TemperatureTab {
   @Consume deviceManager: DeviceManager;
+  @Prop deviceId: string = '';
+  @Prop showTitle: boolean = true;
 
   build() {
     Scroll() {
       Column() {
-        this.EnvironmentSection()
-        this.HistorySection()
-        ForEach(this.deviceManager.getAirConditioners(), (device: AirConditionerDevice) => {
+        if (this.visibleEnvironmentDevices().length > 0) {
+          this.EnvironmentSection()
+          this.HistorySection()
+        }
+        ForEach(this.visibleAirConditioners(), (device: AirConditionerDevice) => {
           this.AirConditionerCard(device)
         }, (device: AirConditionerDevice) => device.id + ':' + device.stateVersion.toString())
       }
@@ -24,21 +28,23 @@ export struct TemperatureTab {
       .padding(16)
     }
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
     .scrollBar(BarState.Auto)
   }
 
   @Builder
   EnvironmentSection() {
     Column() {
-      Text('环境监测')
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
-        .margin({ bottom: 12 })
+      if (this.showTitle) {
+        Text('环境监测')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .width('100%')
+          .margin({ bottom: 12 })
+      }
 
-      ForEach(this.deviceManager.getEnvironmentDevices(), (sensor: EnvironmentDevice) => {
+      ForEach(this.visibleEnvironmentDevices(), (sensor: EnvironmentDevice) => {
         Column() {
           Row() {
             this.ValueCard('🌡 温度', sensor.state.temperatureCelsius.toFixed(1) + '°C',
@@ -335,6 +341,34 @@ export struct TemperatureTab {
     const step = source.length / 32;
     for (let index = 0; index < 32; index++) {
       result.push(source[Math.floor(index * step)]);
+    }
+    return result;
+  }
+
+  private visibleEnvironmentDevices(): EnvironmentDevice[] {
+    if (this.deviceId.length === 0) {
+      return this.deviceManager.getEnvironmentDevices();
+    }
+    const result: EnvironmentDevice[] = [];
+    const devices = this.deviceManager.getEnvironmentDevices();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].id === this.deviceId) {
+        result.push(devices[index]);
+      }
+    }
+    return result;
+  }
+
+  private visibleAirConditioners(): AirConditionerDevice[] {
+    if (this.deviceId.length === 0) {
+      return this.deviceManager.getAirConditioners();
+    }
+    const result: AirConditionerDevice[] = [];
+    const devices = this.deviceManager.getAirConditioners();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].id === this.deviceId) {
+        result.push(devices[index]);
+      }
     }
     return result;
   }

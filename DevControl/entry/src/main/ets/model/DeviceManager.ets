@@ -16,12 +16,13 @@ import {
   parseDevice,
   SceneExecutionDetail
 } from './DeviceModel';
-import { GatewayTransportListener } from '../service/GatewayTransport';
+import { GatewayTransport, GatewayTransportListener } from '../service/GatewayTransport';
 import { DemoCertificateStore } from '../service/DemoCertificateStore';
 import { DeviceSnapshotStore } from '../service/DeviceSnapshotStore';
 import { GatewaySessionStore } from '../service/GatewaySessionStore';
 import { PairingPreferenceStore } from '../service/PairingPreferenceStore';
 import { WssGatewayTransport } from '../service/WssGatewayTransport';
+import { DeviceRegistry } from './DeviceRegistry';
 
 @Observed
 export class DeviceManager implements GatewayTransportListener {
@@ -42,7 +43,7 @@ export class DeviceManager implements GatewayTransportListener {
   lastHeartbeatAt: number = 0;
   pendingDeviceIds: string[] = [];
 
-  private transport: WssGatewayTransport = new WssGatewayTransport();
+  private transport: GatewayTransport;
   private sessionStore: GatewaySessionStore | null = null;
   private snapshotStore: DeviceSnapshotStore | null = null;
   private pairingPreferenceStore: PairingPreferenceStore | null = null;
@@ -50,6 +51,10 @@ export class DeviceManager implements GatewayTransportListener {
   private pendingByMessage: Map<string, string> = new Map<string, string>();
   private actionByMessage: Map<string, string> = new Map<string, string>();
   private timeoutByMessage: Map<string, number> = new Map<string, number>();
+
+  constructor(transport: GatewayTransport = new WssGatewayTransport()) {
+    this.transport = transport;
+  }
 
   async initialize(context: common.UIAbilityContext): Promise<void> {
     if (this.initialized) {
@@ -314,6 +319,14 @@ export class DeviceManager implements GatewayTransportListener {
     return result;
   }
 
+  getDevicesByRoom(roomId: string): DeviceInfo[] {
+    return DeviceRegistry.getRoomDevices(this.devices, roomId);
+  }
+
+  getRoomIds(): string[] {
+    return DeviceRegistry.getRoomIds(this.devices);
+  }
+
   getLights(): LightDevice[] {
     return this.getDevicesByType(DeviceType.LIGHT) as LightDevice[];
   }
@@ -462,6 +475,10 @@ export class DeviceManager implements GatewayTransportListener {
     action: string,
     payload: CommandPayload
   ): Promise<void> {
+    if (!DeviceRegistry.supportsAction(device.type, action)) {
+      this.setError('INVALID_COMMAND', '该设备不支持此控制操作');
+      return;
+    }
     await this.submitRaw(device.id, action, device.stateVersion, payload);
   }
 

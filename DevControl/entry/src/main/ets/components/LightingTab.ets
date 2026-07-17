@@ -4,18 +4,22 @@ import { DeviceManager } from '../model/DeviceManager';
 @Component
 export struct LightingTab {
   @Consume deviceManager: DeviceManager;
+  @Prop deviceId: string = '';
+  @Prop showTitle: boolean = true;
 
   build() {
     Scroll() {
       Column() {
-        Text('照明中心')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .width('100%')
-          .margin({ bottom: 16 })
+        if (this.showTitle) {
+          Text('照明中心')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+            .margin({ bottom: 16 })
+        }
 
-        ForEach(this.deviceManager.getLights(), (device: LightDevice) => {
+        ForEach(this.visibleLights(), (device: LightDevice) => {
           this.LightCard(device)
           this.AutomationCard(device)
         }, (device: LightDevice) => device.id + ':' + device.stateVersion.toString())
@@ -24,8 +28,22 @@ export struct LightingTab {
       .padding(16)
     }
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
     .scrollBar(BarState.Auto)
+  }
+
+  private visibleLights(): LightDevice[] {
+    if (this.deviceId.length === 0) {
+      return this.deviceManager.getLights();
+    }
+    const result: LightDevice[] = [];
+    const lights = this.deviceManager.getLights();
+    for (let index = 0; index < lights.length; index++) {
+      if (lights[index].id === this.deviceId) {
+        result.push(lights[index]);
+      }
+    }
+    return result;
   }
 
   @Builder
