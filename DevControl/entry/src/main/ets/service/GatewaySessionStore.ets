@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { util } from '@kit.ArkTS';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { huks } from '@kit.UniversalKeystoreKit';
 import native from 'libentry.so';
 import { GatewaySession } from '../model/DeviceModel';
@@ -11,6 +12,7 @@ const SESSION_BLOB_KEY = 'encryptedSession';
 const SESSION_VERSION = 1;
 const SESSION_AAD = 'DevControl/GatewaySession/v1';
 const GCM_TAG_LENGTH = 16;
+const HUKS_ITEM_NOT_EXIST = 12000011;
 
 class StoredSessionBlob {
   version: number = SESSION_VERSION;
@@ -55,7 +57,7 @@ export class GatewaySessionStore {
   }
 
   async restore(): Promise<GatewaySession | null> {
-    const exists = await huks.isKeyItemExist(KEY_ALIAS, {});
+    const exists = await this.keyItemExists();
     if (!exists) {
       return null;
     }
@@ -121,7 +123,7 @@ export class GatewaySessionStore {
   }
 
   private async ensureWrappingKey(): Promise<void> {
-    const exists = await huks.isKeyItemExist(KEY_ALIAS, {});
+    const exists = await this.keyItemExists();
     if (exists) {
       return;
     }
@@ -149,6 +151,19 @@ export class GatewaySessionStore {
       }
     ];
     await huks.generateKeyItem(KEY_ALIAS, { properties: properties });
+  }
+
+  private async keyItemExists(): Promise<boolean> {
+    try {
+      return await huks.isKeyItemExist(KEY_ALIAS, {});
+    } catch (error) {
+      const businessError = error as BusinessError;
+      if (businessError.code === HUKS_ITEM_NOT_EXIST) {
+        return false;
+      }
+      const message = error instanceof Error ? error.message : JSON.stringify(error);
+      throw new Error(message);
+    }
   }
 
   private async secureRandom(length: number): Promise<Uint8Array> {
@@ -200,8 +215,13 @@ export class GatewaySessionStore {
       }
       return result.outData;
     } catch (error) {
-      await huks.abortSession(handle.handle, {});
       const message = error instanceof Error ? error.message : JSON.stringify(error);
+      try {
+        await huks.abortSession(handle.handle, {});
+      } catch (abortError) {
+        // finishSession may already have consumed the handle. Cleanup is
+        // best-effort and must never replace the original HUKS failure.
+      }
       throw new Error(message);
     }
   }
