@@ -1,5 +1,6 @@
 /node_modules
 /oh_modules
+/.venv/
 /local.properties
 /.idea
 **/build
