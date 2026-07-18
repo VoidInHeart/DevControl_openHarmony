@@ -5,6 +5,7 @@ import { SettingsTab } from '../components/SettingsTab';
 import { DeviceApplication } from '../model/DeviceApplication';
 import { DeviceManager } from '../model/DeviceManager';
 import { SceneExecutionDetail } from '../model/DeviceModel';
+import { SavedSmartRules, SmartRuleStore } from '../service/SmartRuleStore';
 
 @Entry
 @Component
@@ -27,10 +28,13 @@ struct Index {
   @State savedCustomEnabled: boolean = true;
   @State smartBusy: boolean = false;
   @State smartMessage: string = '';
+  private smartRuleStore: SmartRuleStore | null = null;
+  private smartRulesChangedBeforeRestore: boolean = false;
 
   aboutToAppear(): void {
     const context = getContext(this) as common.UIAbilityContext;
     this.deviceManager.initialize(context);
+    this.restoreSmartRules(context);
   }
 
   onPageShow(): void {
@@ -41,6 +45,61 @@ struct Index {
     ) {
       this.deviceManager.reconnect();
     }
+  }
+
+  private async restoreSmartRules(context: common.UIAbilityContext): Promise<void> {
+    if (this.smartRuleStore !== null) {
+      return;
+    }
+    const store = new SmartRuleStore(context);
+    this.smartRuleStore = store;
+    try {
+      const rules = await store.restore();
+      if (!this.smartRulesChangedBeforeRestore) {
+        this.applySavedSmartRules(rules);
+      }
+    } catch (error) {
+      this.smartMessage = '智能规则读取失败，请重新保存。';
+    }
+  }
+
+  private async persistSmartRules(): Promise<boolean> {
+    this.smartRulesChangedBeforeRestore = true;
+    if (this.smartRuleStore === null) {
+      return false;
+    }
+    try {
+      await this.smartRuleStore.save(this.currentSmartRules());
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  private currentSmartRules(): SavedSmartRules {
+    const rules = new SavedSmartRules();
+    rules.templateId = this.savedTemplateId;
+    rules.templateTitle = this.savedTemplateTitle;
+    rules.templateEnabled = this.savedTemplateEnabled;
+    rules.customTitle = this.savedCustomTitle;
+    rules.customConditionId = this.savedCustomConditionId;
+    rules.customActionId = this.savedCustomActionId;
+    rules.customCondition = this.savedCustomCondition;
+    rules.customAction = this.savedCustomAction;
+    rules.customEnabled = this.savedCustomEnabled;
+    return rules;
+  }
+
+  private applySavedSmartRules(rules: SavedSmartRules): void {
+    this.savedTemplateId = rules.templateId;
+    this.savedTemplateTitle = rules.templateTitle;
+    this.savedTemplateEnabled = rules.templateEnabled;
+    this.savedCustomTitle = rules.customTitle;
+    this.savedCustomConditionId = rules.customConditionId;
+    this.savedCustomActionId = rules.customActionId;
+    this.savedCustomCondition = rules.customCondition;
+    this.savedCustomAction = rules.customAction;
+    this.savedCustomEnabled = rules.customEnabled;
   }
 
   build() {
@@ -263,6 +322,7 @@ struct Index {
         .selectedColor('#1769C2')
         .onChange((value: boolean) => {
           this.savedTemplateEnabled = value;
+          this.persistSmartRules();
         })
     }
     .width('100%')
@@ -307,6 +367,7 @@ struct Index {
         .selectedColor('#1769C2')
         .onChange((value: boolean) => {
           this.savedCustomEnabled = value;
+          this.persistSmartRules();
         })
     }
     .width('100%')
@@ -689,6 +750,7 @@ struct Index {
             } else {
               this.savedCustomEnabled = value;
             }
+            this.persistSmartRules();
           })
       }
       .width('100%')
@@ -800,7 +862,9 @@ struct Index {
       this.savedTemplateTitle = this.templateTitle(templateId);
       this.savedTemplateEnabled = true;
       this.smartDetailTemplateId = '';
-      this.smartMessage = '已保存到我的智能，并已下发到网关执行。';
+      this.smartMessage = await this.persistSmartRules() ?
+        '已保存到我的智能，并已下发到网关执行。' :
+        '已下发到网关执行，但本地保存失败。';
     } catch (error) {
       this.smartMessage = '创建失败，请确认网关在线后再试。';
     } finally {
@@ -820,7 +884,9 @@ struct Index {
       this.savedCustomAction = this.actionLabel();
       this.savedCustomEnabled = true;
       this.showCustomComposer = false;
-      this.smartMessage = '自动化已创建，并已下发相关网关控制。';
+      this.smartMessage = await this.persistSmartRules() ?
+        '自动化已创建，并已下发相关网关控制。' :
+        '自动化已下发到网关，但本地保存失败。';
     } catch (error) {
       this.smartMessage = '创建失败，请确认网关在线后再试。';
     } finally {

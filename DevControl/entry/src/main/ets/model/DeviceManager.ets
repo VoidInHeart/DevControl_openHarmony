@@ -39,7 +39,7 @@ export class DeviceManager implements GatewayTransportListener {
   initialized: boolean = false;
   pairingBusy: boolean = false;
   gatewayAddress: string = '';
-  lastGatewayAddress: string = 'https://192.168.43.60:8443';
+  lastGatewayAddress: string = 'https://192.168.1.100:8443';
   lastError: string = '';
   lastErrorCode: string = '';
   lastSyncAt: number = 0;
