@@ -18,25 +18,42 @@ export struct ControlCenterTab {
   @State activeMetric: string = '';
 
   build() {
-    Scroll() {
-      Column() {
-        if (this.deviceManager.deviceStateRevision >= 0) {
+    Column() {
+      if (this.deviceManager.deviceStateRevision >= 0) {
+        Column() {
           this.HomeHeader()
           this.RoomSegments()
-          this.StatusStrip()
-          if (this.selectedRoom === 'all') {
-            this.FeatureSection()
-          }
-          this.DeviceSection()
         }
+        .width('100%')
+        .padding({ left: 18, right: 18, top: 42, bottom: 0 })
+
+        List() {
+          ListItem() {
+            this.StatusStrip()
+          }
+          if (this.selectedRoom === 'all') {
+            ListItem() {
+              this.FeatureSection()
+            }
+          }
+          ListItem() {
+            this.DeviceSectionTitle()
+          }
+          ForEach(this.visibleDevices(), (device: DeviceInfo) => {
+            ListItem() {
+              this.DeviceRow(device)
+            }
+          }, (device: DeviceInfo) => device.id + ':' + device.stateVersion.toString())
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .padding({ left: 18, right: 18, top: 0, bottom: 0 })
+        .scrollBar(BarState.Off)
       }
-      .width('100%')
-      .padding({ left: 18, right: 18, top: 42, bottom: 18 })
     }
     .width('100%')
     .layoutWeight(1)
     .backgroundColor('#DCEAF2')
-    .scrollBar(BarState.Off)
     .bindSheet(this.showMetricSheet, this.MetricSheet(), {
       height: '70%',
       dragBar: true,
@@ -88,14 +105,10 @@ export struct ControlCenterTab {
   @Builder
   StatusStrip() {
     Row() {
-      if (this.hasEnvironmentSensor()) {
-        this.StatusPill('室温', this.averageTemperature(), '│', '#EAF4FF', 'temperature')
-        this.StatusPill('湿度', this.averageHumidity(), '●', '#EEF9F4', 'humidity')
-      }
-      if (this.selectedRoom === 'all') {
-        this.StatusPill('亮灯', this.lightsOnCount().toString(), '○', '#FFF7E8', 'lights')
-      }
-      this.StatusPill('在线', this.onlineDeviceCount().toString(), '●', '#F0EEFF', 'online')
+      this.TemperaturePill()
+      this.HumidityPill()
+      this.LightsPill()
+      this.OnlinePill()
     }
     .width('100%')
     .justifyContent(FlexAlign.SpaceBetween)
@@ -103,29 +116,110 @@ export struct ControlCenterTab {
   }
 
   @Builder
-  StatusPill(label: string, value: string, icon: string, color: string, metric: string) {
+  TemperaturePill() {
     Column() {
-      Text(icon)
+      Text('│')
         .fontSize(20)
         .opacity(0.85)
-      Text(value)
+      Text(this.averageTemperature())
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor('#1769C2')
         .margin({ top: 3 })
-      Text(label)
+      Text(this.temperatureLabel())
         .fontSize(11)
         .fontColor('#748294')
         .margin({ top: 3 })
     }
-    .width(this.statusPillWidth())
+    .width('23%')
     .height(86)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .backgroundColor(color)
+    .backgroundColor('#EAF4FF')
     .borderRadius(20)
     .onClick(() => {
-      this.openMetricSheet(metric);
+      this.openMetricSheet('temperature');
+    })
+  }
+
+  @Builder
+  HumidityPill() {
+    Column() {
+      Text('●')
+        .fontSize(20)
+        .opacity(0.85)
+      Text(this.averageHumidity())
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#1769C2')
+        .margin({ top: 3 })
+      Text(this.humidityLabel())
+        .fontSize(11)
+        .fontColor('#748294')
+        .margin({ top: 3 })
+    }
+    .width('23%')
+    .height(86)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor('#EEF9F4')
+    .borderRadius(20)
+    .onClick(() => {
+      this.openMetricSheet('humidity');
+    })
+  }
+
+  @Builder
+  LightsPill() {
+    Column() {
+      Text('○')
+        .fontSize(20)
+        .opacity(0.85)
+      Text(this.lightsOnCount().toString())
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#1769C2')
+        .margin({ top: 3 })
+      Text('亮灯')
+        .fontSize(11)
+        .fontColor('#748294')
+        .margin({ top: 3 })
+    }
+    .width('23%')
+    .height(86)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor('#FFF7E8')
+    .borderRadius(20)
+    .onClick(() => {
+      this.openMetricSheet('lights');
+    })
+  }
+
+  @Builder
+  OnlinePill() {
+    Column() {
+      Text('●')
+        .fontSize(20)
+        .opacity(0.85)
+      Text(this.onlineDeviceCount().toString())
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#1769C2')
+        .margin({ top: 3 })
+      Text('在线')
+        .fontSize(11)
+        .fontColor('#748294')
+        .margin({ top: 3 })
+    }
+    .width('23%')
+    .height(86)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor('#F0EEFF')
+    .borderRadius(20)
+    .onClick(() => {
+      this.openMetricSheet('online');
     })
   }
 
@@ -532,6 +626,7 @@ export struct ControlCenterTab {
     .margin({ bottom: 6 })
   }
 
+
   @Builder
   FeatureCard(feature: DeviceFeature) {
     Column() {
@@ -572,14 +667,19 @@ export struct ControlCenterTab {
   }
 
   @Builder
-  DeviceSection() {
-    Column() {
-      this.SectionTitle(this.selectedRoom === 'all' ? '全部设备' : this.roomLabel(this.selectedRoom))
-      ForEach(this.visibleDevices(), (device: DeviceInfo) => {
-        this.DeviceRow(device)
-      }, (device: DeviceInfo) => device.id + ':' + device.stateVersion.toString())
+  DeviceSectionTitle() {
+    Row() {
+      Column() {
+        Text(this.deviceSectionTitle())
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+      }
+      .alignItems(HorizontalAlign.Start)
+      Blank()
     }
     .width('100%')
+    .margin({ bottom: 12 })
   }
 
   @Builder
@@ -653,14 +753,22 @@ export struct ControlCenterTab {
   }
 
   private visibleDevices(): DeviceInfo[] {
-    return this.scopedDevices();
+    return this.devicesForSelectedRoom();
   }
 
   private scopedDevices(): DeviceInfo[] {
-    if (this.selectedRoom === 'all') {
-      return this.deviceManager.devices;
+    return this.devicesForSelectedRoom();
+  }
+
+  private devicesForSelectedRoom(): DeviceInfo[] {
+    const result: DeviceInfo[] = [];
+    const devices = this.deviceManager.devices;
+    for (let index = 0; index < devices.length; index++) {
+      if (this.selectedRoom === 'all' || devices[index].roomId === this.selectedRoom) {
+        result.push(devices[index]);
+      }
     }
-    return this.deviceManager.getDevicesByRoom(this.selectedRoom);
+    return result;
   }
 
   private scopedEnvironmentDevices(): EnvironmentDevice[] {
@@ -687,10 +795,13 @@ export struct ControlCenterTab {
 
   private activeLights(): LightDevice[] {
     const result: LightDevice[] = [];
-    const lights = this.deviceManager.getLights();
-    for (let index = 0; index < lights.length; index++) {
-      if (lights[index].state.power) {
-        result.push(lights[index]);
+    const devices = this.scopedDevices();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].type === DeviceType.LIGHT) {
+        const light = devices[index] as LightDevice;
+        if (light.state.power) {
+          result.push(light);
+        }
       }
     }
     return result;
@@ -711,15 +822,19 @@ export struct ControlCenterTab {
     return this.onlineDevices().length;
   }
 
-  private hasEnvironmentSensor(): boolean {
-    return this.scopedEnvironmentDevices().length > 0;
+  private deviceSectionTitle(): string {
+    if (this.selectedRoom === 'all') {
+      return '全屋设备';
+    }
+    return this.roomLabel(this.selectedRoom) + '设备';
   }
 
-  private statusPillWidth(): string {
-    if (this.selectedRoom === 'all') {
-      return this.hasEnvironmentSensor() ? '23%' : '48.5%';
-    }
-    return this.hasEnvironmentSensor() ? '31.5%' : '100%';
+  private temperatureLabel(): string {
+    return this.selectedRoom === 'all' ? '均温' : '室温';
+  }
+
+  private humidityLabel(): string {
+    return this.selectedRoom === 'all' ? '均湿' : '湿度';
   }
 
   private openMetricSheet(metric: string): void {
@@ -932,12 +1047,16 @@ export struct ControlCenterTab {
 
   private lightsOnCount(): number {
     let count = 0;
-    const lights = this.deviceManager.getLights();
-    for (let index = 0; index < lights.length; index++) {
-      if (lights[index].state.power) {
-        count++;
+    const devices = this.scopedDevices();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].type === DeviceType.LIGHT) {
+        const light = devices[index] as LightDevice;
+        if (light.state.power) {
+          count++;
+        }
       }
     }
     return count;
   }
+
 }

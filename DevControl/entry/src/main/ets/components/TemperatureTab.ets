@@ -1,5 +1,6 @@
 import {
   ACMode,
+  ACFanSpeed,
   AirConditionerDevice,
   DeviceBrand,
   EnvironmentDevice,
@@ -47,36 +48,43 @@ export struct TemperatureTab {
       ForEach(this.visibleEnvironmentDevices(), (sensor: EnvironmentDevice) => {
         Column() {
           Row() {
-            this.ValueCard('🌡 温度', sensor.state.temperatureCelsius.toFixed(1) + '°C',
+            Column() {
+              Text(sensor.name)
+                .fontSize(17)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text(sensor.state.dataValid ? '数据有效 · ' + (sensor.online ? '在线' : '离线') : '数据异常')
+                .fontSize(12)
+                .fontColor(sensor.state.dataValid ? '#748294' : $r('app.color.status_alert'))
+                .margin({ top: 4 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+          }
+          .width('100%')
+          .margin({ bottom: 14 })
+
+          Row() {
+            this.ValueCard('温度', sensor.state.temperatureCelsius.toFixed(1) + '°C',
               this.getTempColor(sensor.state.temperatureCelsius))
-            this.ValueCard('💧 湿度', sensor.state.humidityPercent.toFixed(0) + '%',
+            this.ValueCard('湿度', sensor.state.humidityPercent.toFixed(0) + '%',
               $r('app.color.primary'))
           }
           .width('100%')
           Row() {
-            Text('照度 ' + sensor.state.illuminanceLux.toFixed(0) + ' lx')
-              .fontSize(13)
-              .fontColor($r('app.color.text_secondary'))
-            Blank()
-            Text(sensor.state.presence ? '检测到有人' : '当前无人')
-              .fontSize(13)
-              .fontColor(sensor.state.presence ?
-                $r('app.color.status_online') : $r('app.color.text_secondary'))
+            this.ValueCard('照度', sensor.state.illuminanceLux.toFixed(0) + ' lx',
+              $r('app.color.text_primary'))
+            this.ValueCard('人体', sensor.state.presence ? '有人' : '无人',
+              sensor.state.presence ? $r('app.color.status_online') : $r('app.color.text_secondary'))
           }
           .width('100%')
           .margin({ top: 12 })
-          if (!sensor.state.dataValid) {
-            Text('传感器数据超出有效范围，已停止参与自动规则。')
-              .fontSize(12)
-              .fontColor($r('app.color.status_alert'))
-              .width('100%')
-              .margin({ top: 8 })
-          }
         }
         .width('100%')
         .padding(16)
-        .borderRadius(16)
-        .backgroundColor($r('app.color.card_background'))
+        .borderRadius(24)
+        .backgroundColor('#F7FBFF')
+        .margin({ bottom: 12 })
       }, (sensor: EnvironmentDevice) => sensor.id + ':' + sensor.stateVersion.toString())
     }
     .width('100%')
@@ -90,13 +98,18 @@ export struct TemperatureTab {
         .fontSize(13)
         .fontColor($r('app.color.text_secondary'))
       Text(value)
-        .fontSize(28)
+        .fontSize(24)
         .fontWeight(FontWeight.Bold)
         .fontColor(color)
         .margin({ top: 4 })
     }
     .layoutWeight(1)
     .alignItems(HorizontalAlign.Center)
+    .height(74)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(Color.White)
+    .borderRadius(18)
+    .margin({ right: 8 })
   }
 
   @Builder
@@ -137,29 +150,30 @@ export struct TemperatureTab {
   AirConditionerCard(device: AirConditionerDevice) {
     Column() {
       Row() {
-        Text(device.state.power ? '❄' : '⏻')
-          .fontSize(36)
-          .fontColor(device.state.power ?
-            $r('app.color.temp_cool') : $r('app.color.status_offline'))
+        Text('❄')
+          .fontSize(28)
+          .fontColor(device.state.power ? '#1769C2' : '#8AA0B6')
+          .width(56)
+          .height(56)
+          .textAlign(TextAlign.Center)
+          .backgroundColor(device.state.power ? '#EAF4FF' : '#EEF5FB')
+          .borderRadius(20)
         Column() {
           Text(device.name)
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_primary'))
-          Text(this.brandLabel(device.state.brand) + ' · ' +
-            (device.state.power ? '运行中' : '已关闭'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
-            .margin({ top: 2 })
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text(this.brandLabel(device.state.brand) + '适配 · ' +
+            (device.state.power ? '运行中' : '已关闭') + ' · ' + this.fanSpeedLabel(device.state.fanSpeed))
+            .fontSize(12)
+            .fontColor('#748294')
+            .margin({ top: 5 })
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
         .margin({ left: 12 })
         if (this.deviceManager.isDevicePending(device.id)) {
-          Text('处理中')
-            .fontSize(12)
-            .fontColor($r('app.color.status_warning'))
-            .margin({ right: 8 })
+          this.PendingBadge()
         }
         Toggle({ type: ToggleType.Switch, isOn: device.state.power })
           .enabled(this.canControl(device))
@@ -168,34 +182,63 @@ export struct TemperatureTab {
           })
       }
       .width('100%')
+      .alignItems(VerticalAlign.Center)
 
       Row() {
-        Text('目标温度')
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
-        Blank()
-        Text(device.state.targetTemperatureCelsius.toFixed(0) + '°C')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary'))
+        Column() {
+          Text('当前室温')
+            .fontSize(12)
+            .fontColor('#748294')
+          Text(this.roomTemperature(device.roomId))
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+            .margin({ top: 4 })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        Column() {
+          Text('目标温度')
+            .fontSize(12)
+            .fontColor('#748294')
+          Row() {
+            Button('-')
+              .width(42)
+              .height(42)
+              .fontSize(20)
+              .fontColor('#1769C2')
+              .backgroundColor(Color.White)
+              .enabled(this.canControl(device) && device.state.targetTemperatureCelsius > 16)
+              .onClick(() => {
+                this.deviceManager.setAcTemperature(device, device.state.targetTemperatureCelsius - 1);
+              })
+            Text(device.state.targetTemperatureCelsius.toFixed(0) + '°')
+              .fontSize(36)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1769C2')
+              .width(86)
+              .textAlign(TextAlign.Center)
+            Button('+')
+              .width(42)
+              .height(42)
+              .fontSize(20)
+              .fontColor('#1769C2')
+              .backgroundColor(Color.White)
+              .enabled(this.canControl(device) && device.state.targetTemperatureCelsius < 30)
+              .onClick(() => {
+                this.deviceManager.setAcTemperature(device, device.state.targetTemperatureCelsius + 1);
+              })
+          }
+          .margin({ top: 4 })
+          .alignItems(VerticalAlign.Center)
+        }
+        .alignItems(HorizontalAlign.Center)
       }
       .width('100%')
-      .margin({ top: 16 })
-      Slider({
-        value: device.state.targetTemperatureCelsius,
-        min: 16,
-        max: 30,
-        step: 1,
-        style: SliderStyle.OutSet
-      })
-        .width('100%')
-        .enabled(this.canControl(device))
-        .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
-        .onChange((value: number, mode: SliderChangeMode) => {
-          if (this.shouldCommitSlider(mode)) {
-            this.deviceManager.setAcTemperature(device, value);
-          }
-        })
+      .padding(16)
+      .backgroundColor(Color.White)
+      .borderRadius(22)
+      .margin({ top: 18 })
 
       Text('运行模式')
         .fontSize(14)
@@ -211,6 +254,20 @@ export struct TemperatureTab {
       }
       .width('100%')
 
+      Text('风速')
+        .fontSize(14)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+        .margin({ top: 12, bottom: 8 })
+      Row() {
+        this.FanSpeedButton(device, '自动', ACFanSpeed.AUTO)
+        this.FanSpeedButton(device, '低风', ACFanSpeed.LOW)
+        this.FanSpeedButton(device, '中风', ACFanSpeed.MEDIUM)
+        this.FanSpeedButton(device, '高风', ACFanSpeed.HIGH)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.SpaceBetween)
+
       Text('模拟品牌适配器')
         .fontSize(14)
         .fontColor($r('app.color.text_secondary'))
@@ -225,27 +282,55 @@ export struct TemperatureTab {
       .justifyContent(FlexAlign.SpaceBetween)
 
       if (device.state.lastAdapterFrame.length > 0) {
-        Text(device.state.lastAdapterFrame)
-          .fontSize(11)
-          .fontColor($r('app.color.text_secondary'))
-          .width('100%')
-          .margin({ top: 10 })
+        Column() {
+          Text('最近下发控制帧')
+            .fontSize(12)
+            .fontColor('#748294')
+            .width('100%')
+          Text(device.state.lastAdapterFrame)
+            .fontSize(11)
+            .fontColor('#14263A')
+            .width('100%')
+            .margin({ top: 5 })
+        }
+        .width('100%')
+        .padding(12)
+        .backgroundColor(Color.White)
+        .borderRadius(16)
+        .margin({ top: 12 })
       }
     }
     .width('100%')
     .padding(16)
-    .borderRadius(16)
-    .backgroundColor($r('app.color.card_background'))
+    .borderRadius(24)
+    .backgroundColor('#F7FBFF')
     .margin({ bottom: 12 })
+  }
+
+  @Builder
+  PendingBadge() {
+    Row() {
+      Text('•')
+        .fontSize(16)
+        .fontColor('#D28A00')
+        .margin({ right: 4 })
+      Text('同步中')
+        .fontSize(11)
+        .fontColor('#8A5A00')
+    }
+    .height(28)
+    .padding({ left: 9, right: 10 })
+    .backgroundColor('#FFF3D6')
+    .borderRadius(14)
   }
 
   @Builder
   ModeButton(device: AirConditionerDevice, label: string, mode: string) {
     Button(label)
       .fontSize(12)
-      .fontColor(device.state.mode === mode ? Color.White : $r('app.color.text_primary'))
+      .fontColor(device.state.mode === mode ? '#1769C2' : $r('app.color.text_primary'))
       .backgroundColor(device.state.mode === mode ?
-        $r('app.color.primary') : $r('app.color.start_window_background'))
+        '#EAF4FF' : Color.White)
       .enabled(this.canControl(device))
       .margin({ right: 4, bottom: 6 })
       .onClick(() => {
@@ -254,12 +339,24 @@ export struct TemperatureTab {
   }
 
   @Builder
+  FanSpeedButton(device: AirConditionerDevice, label: string, fanSpeed: string) {
+    Button(label)
+      .fontSize(12)
+      .fontColor(device.state.fanSpeed === fanSpeed ? '#1769C2' : $r('app.color.text_primary'))
+      .backgroundColor(device.state.fanSpeed === fanSpeed ? '#EAF4FF' : Color.White)
+      .enabled(this.canControl(device))
+      .onClick(() => {
+        this.deviceManager.setAcFanSpeed(device, fanSpeed);
+      })
+  }
+
+  @Builder
   BrandButton(device: AirConditionerDevice, label: string, brand: string) {
     Button(label)
       .fontSize(11)
-      .fontColor(device.state.brand === brand ? Color.White : $r('app.color.text_primary'))
+      .fontColor(device.state.brand === brand ? '#1769C2' : $r('app.color.text_primary'))
       .backgroundColor(device.state.brand === brand ?
-        $r('app.color.primary') : $r('app.color.start_window_background'))
+        '#EAF4FF' : Color.White)
       .enabled(this.canControl(device))
       .onClick(() => {
         this.deviceManager.setAcBrand(device, brand);
@@ -283,6 +380,29 @@ export struct TemperatureTab {
       return '美的 Sim';
     }
     return '海尔 Sim';
+  }
+
+  private fanSpeedLabel(fanSpeed: string): string {
+    if (fanSpeed === ACFanSpeed.LOW) {
+      return '低风';
+    }
+    if (fanSpeed === ACFanSpeed.MEDIUM) {
+      return '中风';
+    }
+    if (fanSpeed === ACFanSpeed.HIGH) {
+      return '高风';
+    }
+    return '自动风';
+  }
+
+  private roomTemperature(roomId: string): string {
+    const sensors = this.deviceManager.getEnvironmentDevices();
+    for (let index = 0; index < sensors.length; index++) {
+      if (sensors[index].roomId === roomId) {
+        return sensors[index].state.temperatureCelsius.toFixed(1) + '°C';
+      }
+    }
+    return '--';
   }
 
   private getTempColor(temp: number): Resource {

@@ -2,6 +2,8 @@ import { common } from '@kit.AbilityKit';
 import native from 'libentry.so';
 import {
   AccessLogEntry,
+  ACFanSpeed,
+  ACMode,
   AirConditionerDevice,
   AlertEntry,
   CommandPayload,
@@ -37,7 +39,7 @@ export class DeviceManager implements GatewayTransportListener {
   initialized: boolean = false;
   pairingBusy: boolean = false;
   gatewayAddress: string = '';
-  lastGatewayAddress: string = 'https://192.168.1.100:8443';
+  lastGatewayAddress: string = 'https://192.168.43.60:8443';
   lastError: string = '';
   lastErrorCode: string = '';
   lastSyncAt: number = 0;
@@ -440,6 +442,12 @@ export class DeviceManager implements GatewayTransportListener {
     await this.submit(device, 'setTemperature', payload);
   }
 
+  async setAcFanSpeed(device: AirConditionerDevice, fanSpeed: string): Promise<void> {
+    const payload = new CommandPayload();
+    payload.fanSpeed = fanSpeed;
+    await this.submit(device, 'setFanSpeed', payload);
+  }
+
   async setAcBrand(device: AirConditionerDevice, brand: string): Promise<void> {
     const payload = new CommandPayload();
     payload.brand = brand;
@@ -469,9 +477,71 @@ export class DeviceManager implements GatewayTransportListener {
     await this.submitRaw('scene-home', 'executeHome', null, new CommandPayload());
   }
 
+  async applySmartTemplate(templateId: string): Promise<void> {
+    if (templateId === 'away') {
+      await this.executeAwayScene();
+      return;
+    }
+    if (templateId === 'home') {
+      await this.executeHomeScene();
+      return;
+    }
+    if (templateId === 'motionLight') {
+      await this.enableMotionLighting(100, 60);
+      return;
+    }
+    if (templateId === 'cooling') {
+      await this.configureAllAirConditioners(true, ACMode.COOL, 24, ACFanSpeed.AUTO);
+      return;
+    }
+    if (templateId === 'heating') {
+      await this.configureAllAirConditioners(true, ACMode.HEAT, 26, ACFanSpeed.LOW);
+      return;
+    }
+    if (templateId === 'humidityDry') {
+      await this.configureAllAirConditioners(true, ACMode.DRY, 24, ACFanSpeed.MEDIUM);
+    }
+  }
+
+  async applyCustomAutomation(condition: string, action: string): Promise<void> {
+    if (action === 'livingLight') {
+      await this.enableMotionLighting(condition === 'motionDark' ? 100 : 180, 60);
+      return;
+    }
+    if (action === 'dryMode') {
+      await this.configureAllAirConditioners(true, ACMode.DRY, 24, ACFanSpeed.MEDIUM);
+      return;
+    }
+    if (action === 'awayScene') {
+      await this.executeAwayScene();
+    }
+  }
+
   private async connectAndSync(): Promise<void> {
     await this.transport.connect(this);
     await this.refreshAll();
+  }
+
+  private async enableMotionLighting(threshold: number, delaySeconds: number): Promise<void> {
+    const lights = this.getLights();
+    for (let index = 0; index < lights.length; index++) {
+      await this.setLightAutomation(lights[index], true, threshold, delaySeconds);
+    }
+  }
+
+  private async configureAllAirConditioners(
+    power: boolean,
+    mode: string,
+    temperature: number,
+    fanSpeed: string
+  ): Promise<void> {
+    const airConditioners = this.getAirConditioners();
+    for (let index = 0; index < airConditioners.length; index++) {
+      await this.setAcPower(airConditioners[index], power);
+      await this.setAcMode(airConditioners[index], mode);
+      await this.setAcTemperature(airConditioners[index], temperature);
+      await this.setAcFanSpeed(airConditioners[index], fanSpeed);
+    }
   }
 
   private async submit(

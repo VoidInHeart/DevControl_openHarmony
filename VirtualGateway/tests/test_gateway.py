@@ -270,9 +270,9 @@ def test_away_scene_returns_per_device_results(
     )
     result, events = process(service, session, envelope)
     assert result["success"] is True
-    assert len(result["details"]) == 3
+    assert len(result["details"]) == 8
     assert all(item["success"] for item in result["details"])
-    assert len(events) == 3
+    assert len(events) == 8
     assert service.devices.get("light-living-01")["power"] is False
     assert service.devices.get("ac-living-01")["power"] is False
     assert service.devices.get("door-entry-01")["locked"] is True
@@ -296,9 +296,9 @@ def test_home_scene_returns_per_device_results(
     )
     result, events = process(service, session, envelope)
     assert result["success"] is True
-    assert len(result["details"]) == 3
+    assert len(result["details"]) == 4
     assert all(item["success"] for item in result["details"])
-    assert len(events) == 3
+    assert len(events) == 4
     light = service.devices.get("light-living-01")
     ac = service.devices.get("ac-living-01")
     assert light["power"] is True
@@ -393,7 +393,7 @@ def test_rest_and_websocket_contract(tmp_path: Path) -> None:
         headers = {"Authorization": f"Bearer {credential}"}
         snapshot = client.get("/api/v1/devices", headers=headers)
         assert snapshot.status_code == 200
-        assert len(snapshot.json()["devices"]) == 4
+        assert len(snapshot.json()["devices"]) == 11
 
         light = gateway.devices.get("light-living-01")
         envelope = command(
