@@ -20,6 +20,7 @@ class GatewayConfig:
     admin_token: str = ""
     telemetry_interval_seconds: float = 2.0
     enable_background_tasks: bool = True
+    enable_demo_extensions: bool = True
 
     @classmethod
     def from_env(cls) -> "GatewayConfig":
@@ -39,4 +40,7 @@ class GatewayConfig:
             telemetry_interval_seconds=float(
                 os.getenv("DEVCONTROL_TELEMETRY_INTERVAL", "2")
             ),
+            enable_demo_extensions=os.getenv(
+                "DEVCONTROL_ENABLE_DEMO_EXTENSIONS", "true"
+            ).lower() not in {"0", "false", "no"},
         )

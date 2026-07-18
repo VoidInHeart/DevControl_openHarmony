@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from devcontrol_gateway.app import create_app
+from devcontrol_gateway.composition import default_drivers
 from devcontrol_gateway.config import GatewayConfig
 from devcontrol_gateway.errors import AUTH_FAILED, RATE_LIMITED
 from devcontrol_gateway.models import PROTOCOL_VERSION, SecureCommandEnvelope
@@ -388,8 +389,9 @@ def test_rest_and_websocket_contract(tmp_path: Path) -> None:
         headers = {"Authorization": f"Bearer {credential}"}
         snapshot = client.get("/api/v1/devices", headers=headers)
         assert snapshot.status_code == 200
-        assert len(snapshot.json()["devices"]) == 5
+        assert len(snapshot.json()["devices"]) == 6
         assert any(item["type"] == "curtain" for item in snapshot.json()["devices"])
+        assert any(item["type"] == "fan" for item in snapshot.json()["devices"])
 
         light = gateway.devices.get("light-living-01")
         envelope = command(
@@ -465,3 +467,68 @@ def test_curtain_secure_command_is_idempotent_and_emits_state(
     )
     conflict, _ = process(service, session, stale)
     assert conflict["error"]["code"] == "STATE_CONFLICT"
+
+
+def test_new_virtual_fan_uses_generic_secure_command_path(
+    service: GatewayService,
+) -> None:
+    assert all(
+        driver.device_type != "fan"
+        for driver in default_drivers(include_demo_extensions=False)
+    )
+    assert any(
+        driver.device_type == "fan"
+        for driver in default_drivers(include_demo_extensions=True)
+    )
+    _, session = pair(service)
+    fan = service.devices.get("fan-bedroom-01")
+    assert fan["category"]["id"] == "fans"
+    assert [control["kind"] for control in fan["controls"]] == [
+        "toggle",
+        "enum",
+        "toggle",
+    ]
+
+    power, power_events = process(
+        service,
+        session,
+        command(
+            session,
+            device_id=fan["id"],
+            action="setPower",
+            expected_version=fan["stateVersion"],
+            payload={"power": True},
+        ),
+    )
+    assert power["success"] is True
+    assert power_events[0]["device"]["state"]["power"] is True
+
+    fan = service.devices.get("fan-bedroom-01")
+    speed, speed_events = process(
+        service,
+        session,
+        command(
+            session,
+            device_id=fan["id"],
+            action="setSpeed",
+            expected_version=fan["stateVersion"],
+            payload={"speed": "high"},
+        ),
+    )
+    assert speed["success"] is True
+    assert speed_events[0]["device"]["state"]["speed"] == "high"
+
+    fan = service.devices.get("fan-bedroom-01")
+    invalid, invalid_events = process(
+        service,
+        session,
+        command(
+            session,
+            device_id=fan["id"],
+            action="setSpeed",
+            expected_version=fan["stateVersion"],
+            payload={"speed": "turbo"},
+        ),
+    )
+    assert invalid["error"]["code"] == "INVALID_COMMAND"
+    assert invalid_events == []

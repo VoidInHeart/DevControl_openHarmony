@@ -40,9 +40,11 @@ python -m pip install -r requirements.txt
 
 网关通过 `DeviceDriver` 显式注册设备族：
 
-1. 在 `devcontrol_gateway/drivers.py` 实现 `create_devices`、`execute`，需要连续状态变化时再实现 `tick`。
-2. 将驱动加入 `default_drivers()`；注册表会拒绝重复设备类型、重复设备编号和类型不一致的初始设备。
+1. 在 `devcontrol_gateway/extensions/` 新增一个驱动文件，实现 `create_devices`、`execute`，需要连续状态变化时再实现 `tick`。
+2. 只在 `devcontrol_gateway/composition.py` 的 `default_drivers()` 中显式注册；注册表会拒绝重复设备类型、重复设备编号和类型不一致的初始设备。
 3. 通用设备在快照中提供受限的 `category/state/controls` 描述，APP 即可自动分组并生成控制页。
 4. 在线检查、状态版本、故障注入、审计、命令幂等和 WSS 状态事件由注册表与服务层统一处理。
 
-智能窗帘是该扩展链路的默认示例。真实厂商设备应通过公开 SDK 或合法协议实现独立驱动，不得把模拟兼容名称用于商用兼容声明。
+智能窗帘是渐进状态设备示例；`extensions/virtual_fan.py` 是一次完整的新增设备演练。它注册后自动出现在卧室和“风扇”功能分组，APP 无需新增类型、解析或页面分支。
+
+新增空调品牌目前仍需同步修改 `adapters.py`、协议 Schema 品牌枚举、ArkTS `DeviceBrand` 和空调页面选项，尚未达到单点注册。真实厂商设备应通过公开 SDK 或合法协议实现独立驱动，不得把模拟兼容名称用于商用兼容声明。

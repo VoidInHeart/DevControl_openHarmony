@@ -5,7 +5,8 @@ import time
 from collections.abc import Iterable
 from typing import Any
 
-from .drivers import DeviceDriver, default_drivers, iso_now
+from .composition import default_drivers
+from .drivers import DeviceDriver, iso_now
 from .errors import (
     COMMAND_TIMEOUT,
     DEVICE_OFFLINE,

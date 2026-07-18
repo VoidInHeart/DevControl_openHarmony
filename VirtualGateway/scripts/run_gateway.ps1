@@ -5,7 +5,8 @@ param(
   [int]$AdminPort = 18444,
   [ValidateRange(1, 31536000)]
   [int]$CredentialTtlSeconds = 86400,
-  [string]$AdminToken = ""
+  [string]$AdminToken = "",
+  [switch]$WithoutDemoExtensions
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +15,7 @@ $env:DEVCONTROL_HOST = $HostAddress
 $env:DEVCONTROL_PORT = $Port.ToString()
 $env:DEVCONTROL_ADMIN_PORT = $AdminPort.ToString()
 $env:DEVCONTROL_CREDENTIAL_TTL_SECONDS = $CredentialTtlSeconds.ToString()
+$env:DEVCONTROL_ENABLE_DEMO_EXTENSIONS = if ($WithoutDemoExtensions) { "false" } else { "true" }
 $env:DEVCONTROL_TLS_CERT = (Join-Path $GatewayRoot "certs\gateway.crt")
 $env:DEVCONTROL_TLS_KEY = (Join-Path $GatewayRoot "certs\gateway.key")
 $env:DEVCONTROL_DATABASE = (Join-Path $GatewayRoot "data\devcontrol.db")

@@ -534,13 +534,3 @@ class CurtainDriver(DeviceDriver):
         if current == target:
             state["movement"] = "stopped"
         return True
-
-
-def default_drivers() -> list[DeviceDriver]:
-    return [
-        LightDriver(),
-        EnvironmentDriver(),
-        AirConditionerDriver(),
-        DoorLockDriver(),
-        CurtainDriver(),
-    ]
