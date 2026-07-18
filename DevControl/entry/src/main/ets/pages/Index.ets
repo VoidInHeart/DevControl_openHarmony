@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { ControlCenterTab } from '../components/ControlCenterTab';
+import { LockIcon } from '../components/LockIcon';
 import { PairingPage } from '../components/PairingPage';
 import { SettingsTab } from '../components/SettingsTab';
 import { DeviceApplication } from '../model/DeviceApplication';
@@ -840,16 +841,12 @@ struct Index {
       }
       .width('100%')
       Row() {
-        Text(this.templateIcon(templateId))
-          .fontSize(26)
-          .fontColor('#1769C2')
+        this.TemplateFlowIcon(this.templateIcon(templateId), 26)
         Text('→')
           .fontSize(18)
           .fontColor('#AEB9C6')
           .margin({ left: 18, right: 18 })
-        Text(this.templateResultIcon(templateId))
-          .fontSize(26)
-          .fontColor('#1769C2')
+        this.TemplateFlowIcon(this.templateResultIcon(templateId), 26)
       }
       .margin({ top: 24 })
       .width('100%')
@@ -877,16 +874,12 @@ struct Index {
         .width('100%')
         .margin({ top: 6 })
       Row() {
-        Text(this.templateIcon(templateId))
-          .fontSize(22)
-          .fontColor('#1769C2')
+        this.TemplateFlowIcon(this.templateIcon(templateId), 22)
         Text('→')
           .fontSize(15)
           .fontColor('#AEB9C6')
           .margin({ left: 10, right: 10 })
-        Text(this.templateResultIcon(templateId))
-          .fontSize(22)
-          .fontColor('#1769C2')
+        this.TemplateFlowIcon(this.templateResultIcon(templateId), 22)
       }
       .margin({ top: 24 })
     }
@@ -1126,14 +1119,25 @@ struct Index {
   @Builder
   DetailBlock(title: string, icon: string, body: string) {
     Row() {
-      Text(icon)
-        .fontSize(22)
-        .fontColor('#1769C2')
-        .width(54)
-        .height(54)
-        .textAlign(TextAlign.Center)
-        .backgroundColor('#EAF4FF')
-        .borderRadius(18)
+      Stack({ alignContent: Alignment.Center }) {
+        if (icon === 'lock-open') {
+          LockIcon({ locked: false, iconSize: 28 })
+        } else if (icon === 'lock-closed') {
+          LockIcon({ locked: true, iconSize: 28 })
+        } else {
+          Text(icon)
+            .fontSize(22)
+            .fontColor('#1769C2')
+            .width(54)
+            .height(54)
+            .lineHeight(54)
+            .textAlign(TextAlign.Center)
+        }
+      }
+      .width(54)
+      .height(54)
+      .backgroundColor('#EAF4FF')
+      .borderRadius(18)
       Column() {
         Text(title)
           .fontSize(14)
@@ -1189,6 +1193,21 @@ struct Index {
     .padding(18)
     .borderRadius(24)
     .backgroundColor(Color.White)
+  }
+
+  @Builder
+  TemplateFlowIcon(icon: string, size: number) {
+    if (icon === 'lock-open') {
+      LockIcon({ locked: false, iconSize: size })
+        .id('smart-template-lock-open')
+    } else if (icon === 'lock-closed') {
+      LockIcon({ locked: true, iconSize: size })
+        .id('smart-template-lock-closed')
+    } else {
+      Text(icon)
+        .fontSize(size)
+        .fontColor('#1769C2')
+    }
   }
 
   private enterRuleSelection(ruleId: string): void {
@@ -1790,7 +1809,10 @@ struct Index {
   }
 
   private templateIcon(templateId: string): string {
-    if (templateId === 'away' || templateId === 'home') {
+    if (templateId === 'away') {
+      return 'lock-open';
+    }
+    if (templateId === 'home') {
       return '⌂';
     }
     if (templateId === 'cooling' || templateId === 'heating' || templateId === 'humidityDry') {
@@ -1801,7 +1823,7 @@ struct Index {
 
   private templateResultIcon(templateId: string): string {
     if (templateId === 'away') {
-      return '□';
+      return 'lock-closed';
     }
     if (templateId === 'cooling' || templateId === 'heating' || templateId === 'humidityDry') {
       return '❄';

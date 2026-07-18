@@ -1,5 +1,6 @@
 import { AccessLogEntry, AlertEntry, DeviceType, DoorLockDevice } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { LockIcon } from './LockIcon';
 
 @Component
 export struct DoorLockTab {
@@ -37,12 +38,11 @@ export struct DoorLockTab {
   DoorCard(device: DoorLockDevice) {
     Column() {
       Row() {
-        Text(device.state.locked ? '⌂' : '□')
-          .fontSize(34)
-          .fontColor(device.state.locked ? '#1769C2' : '#0F8F66')
+        Stack({ alignContent: Alignment.Center }) {
+          LockIcon({ locked: device.state.locked, iconSize: 30 })
+        }
           .width(62)
           .height(62)
-          .textAlign(TextAlign.Center)
           .backgroundColor(device.state.locked ? '#EEF1FF' : '#EAF8F1')
           .borderRadius(22)
         Column() {

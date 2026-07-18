@@ -76,7 +76,7 @@ export class DeviceRegistry {
     new DeviceCapability(DeviceType.AIR_CONDITIONER, '空调', '❄', [
       'setPower', 'setMode', 'setTemperature', 'setFanSpeed', 'setBrand'
     ]),
-    new DeviceCapability(DeviceType.DOOR_LOCK, '门锁', '⌂', [
+    new DeviceCapability(DeviceType.DOOR_LOCK, '门锁', '🔒', [
       'lock', 'unlock', 'setAutoLockConfig'
     ])
   ];
@@ -88,7 +88,7 @@ export class DeviceRegistry {
     new DeviceFeature('environment', '环境', '≈', [
       DeviceType.ENVIRONMENT, DeviceType.AIR_CONDITIONER
     ]),
-    new DeviceFeature('locks', '门锁', '⌂', [DeviceType.DOOR_LOCK], true)
+    new DeviceFeature('locks', '门锁', '🔒', [DeviceType.DOOR_LOCK], true)
   ];
 
   static getCapability(type: string): DeviceCapability | null {
@@ -218,7 +218,7 @@ export class DeviceRegistry {
       return result;
     }
     const doorLock = device as DoorLockDevice;
-    result.icon = doorLock.state.locked ? '⌂' : '□';
+    result.icon = doorLock.state.locked ? '🔒' : '🔓';
     result.summary = doorLock.state.jammed ? '锁体异常' :
       (doorLock.state.locked ? '已上锁' : '已解锁');
     return result;

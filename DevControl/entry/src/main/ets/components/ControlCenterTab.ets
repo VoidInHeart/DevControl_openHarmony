@@ -9,6 +9,7 @@ import {
 } from '../model/DeviceModel';
 import { DeviceFeature, DeviceRegistry } from '../model/DeviceRegistry';
 import { DeviceManager } from '../model/DeviceManager';
+import { LockIcon } from './LockIcon';
 
 @Component
 export struct ControlCenterTab {
@@ -470,13 +471,7 @@ export struct ControlCenterTab {
       } else {
         ForEach(this.onlineDevices(), (device: DeviceInfo) => {
           Row() {
-            Text(this.deviceIcon(device))
-              .fontSize(22)
-              .width(46)
-              .height(46)
-              .textAlign(TextAlign.Center)
-              .backgroundColor(this.deviceTint(device))
-              .borderRadius(16)
+            this.DeviceIconBadge(device, 46)
             Column() {
               Text(device.name)
                 .fontSize(16)
@@ -647,16 +642,26 @@ export struct ControlCenterTab {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       Blank()
       Row() {
-        Blank()
-        Text(this.featureIcon(feature.id))
-          .fontSize(34)
-          .width(54)
-          .height(54)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(this.featureTint(feature.id))
-          .borderRadius(18)
+        Stack({ alignContent: Alignment.Center }) {
+          if (feature.id === 'locks') {
+            LockIcon({ locked: true, iconSize: 26 })
+          } else {
+            Text(this.featureIcon(feature.id))
+              .fontSize(34)
+              .width(54)
+              .height(54)
+              .lineHeight(54)
+              .textAlign(TextAlign.Center)
+          }
+        }
+        .id('feature-icon-' + feature.id)
+        .width(54)
+        .height(54)
+        .backgroundColor(this.featureTint(feature.id))
+        .borderRadius(18)
       }
       .width('100%')
+      .justifyContent(FlexAlign.Center)
     }
     .width('31.8%')
     .height(118)
@@ -688,13 +693,7 @@ export struct ControlCenterTab {
   @Builder
   DeviceRow(device: DeviceInfo) {
     Row() {
-      Text(this.deviceIcon(device))
-        .fontSize(23)
-        .width(50)
-        .height(50)
-        .textAlign(TextAlign.Center)
-        .backgroundColor(this.deviceTint(device))
-        .borderRadius(18)
+      this.DeviceIconBadge(device, 50)
       Column() {
         Text(device.name)
           .fontSize(16)
@@ -730,6 +729,26 @@ export struct ControlCenterTab {
         params: { deviceId: device.id }
       });
     })
+  }
+
+  @Builder
+  DeviceIconBadge(device: DeviceInfo, badgeSize: number) {
+    Stack({ alignContent: Alignment.Center }) {
+      if (device.type === DeviceType.DOOR_LOCK) {
+        LockIcon({ locked: (device as DoorLockDevice).state.locked, iconSize: badgeSize - 20 })
+      } else {
+        Text(this.deviceIcon(device))
+          .fontSize(badgeSize - 27)
+          .width(badgeSize)
+          .height(badgeSize)
+          .lineHeight(badgeSize)
+          .textAlign(TextAlign.Center)
+      }
+    }
+    .width(badgeSize)
+    .height(badgeSize)
+    .backgroundColor(this.deviceTint(device))
+    .borderRadius(badgeSize === 46 ? 16 : 18)
   }
 
   @Builder
@@ -923,7 +942,7 @@ export struct ControlCenterTab {
       return '≈';
     }
     if (featureId === 'locks') {
-      return '⌂';
+      return '🔒';
     }
     return '·';
   }
@@ -962,7 +981,8 @@ export struct ControlCenterTab {
     if (device.type === DeviceType.AIR_CONDITIONER) {
       return '❄';
     }
-    return '⌂';
+    const doorLock = device as DoorLockDevice;
+    return doorLock.state.locked ? '🔒' : '🔓';
   }
 
   private deviceTint(device: DeviceInfo): string {
