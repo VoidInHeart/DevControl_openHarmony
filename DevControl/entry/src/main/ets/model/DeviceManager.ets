@@ -16,6 +16,7 @@ import {
   GatewaySession,
   LightDevice,
   parseDevice,
+  SceneDeviceAction,
   SceneExecutionDetail
 } from './DeviceModel';
 import { GatewayTransport, GatewayTransportListener } from '../service/GatewayTransport';
@@ -475,6 +476,28 @@ export class DeviceManager implements GatewayTransportListener {
 
   async executeHomeScene(): Promise<void> {
     await this.submitRaw('scene-home', 'executeHome', null, new CommandPayload());
+  }
+
+  async executeConfiguredScene(actions: SceneDeviceAction[]): Promise<void> {
+    this.sceneResults = [];
+    for (let index = 0; index < actions.length; index++) {
+      const sceneAction = actions[index];
+      if (sceneAction.operation === 'keep') {
+        continue;
+      }
+      const device = this.getDeviceById(sceneAction.deviceId);
+      if (device === null || device.type === DeviceType.ENVIRONMENT) {
+        continue;
+      }
+      const power = sceneAction.operation === 'on';
+      if (device.type === DeviceType.LIGHT) {
+        await this.setLightPower(device as LightDevice, power);
+      } else if (device.type === DeviceType.AIR_CONDITIONER) {
+        await this.setAcPower(device as AirConditionerDevice, power);
+      } else if (device.type === DeviceType.DOOR_LOCK) {
+        await this.setDoorLocked(device as DoorLockDevice, !power);
+      }
+    }
   }
 
   async applySmartTemplate(templateId: string): Promise<void> {

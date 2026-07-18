@@ -4,8 +4,23 @@ import { PairingPage } from '../components/PairingPage';
 import { SettingsTab } from '../components/SettingsTab';
 import { DeviceApplication } from '../model/DeviceApplication';
 import { DeviceManager } from '../model/DeviceManager';
-import { SceneExecutionDetail } from '../model/DeviceModel';
-import { SavedSmartRules, SmartRuleStore } from '../service/SmartRuleStore';
+import {
+  DeviceInfo,
+  DeviceType,
+  SceneDeviceAction,
+  SceneExecutionDetail
+} from '../model/DeviceModel';
+import {
+  SavedAutomationRule,
+  SavedQuickScene,
+  SavedSmartRules,
+  SmartRuleStore
+} from '../service/SmartRuleStore';
+import { DeviceRegistry } from '../model/DeviceRegistry';
+
+class SceneOperationOption {
+  value: string = '';
+}
 
 @Entry
 @Component
@@ -13,26 +28,30 @@ struct Index {
   @Provide deviceManager: DeviceManager = DeviceApplication.getDeviceManager();
   @State currentTab: string = 'home';
   @State smartDetailTemplateId: string = '';
-  @State smartSavedDetailType: string = '';
+  @State smartSavedDetailId: string = '';
   @State showCustomComposer: boolean = false;
   @State customCondition: string = 'motionDark';
   @State customAction: string = 'livingLight';
-  @State savedTemplateId: string = '';
-  @State savedTemplateTitle: string = '';
-  @State savedCustomTitle: string = '';
-  @State savedCustomConditionId: string = '';
-  @State savedCustomActionId: string = '';
-  @State savedCustomCondition: string = '';
-  @State savedCustomAction: string = '';
-  @State savedTemplateEnabled: boolean = true;
-  @State savedCustomEnabled: boolean = true;
+  @State savedAutomationRules: SavedAutomationRule[] = [];
+  @State ruleSelectionMode: boolean = false;
+  @State selectedRuleIds: string[] = [];
+  @State quickScenes: SavedQuickScene[] = [];
+  @State activeQuickSceneId: string = 'home';
+  @State sceneContextId: string = '';
+  @State sceneEditorId: string = '';
+  @State sceneEditorName: string = '';
+  @State sceneEditorSearch: string = '';
+  @State sceneEditorActions: SceneDeviceAction[] = [];
   @State smartBusy: boolean = false;
   @State smartMessage: string = '';
   private smartRuleStore: SmartRuleStore | null = null;
   private smartRulesChangedBeforeRestore: boolean = false;
+  private suppressedRuleTap: string = '';
+  private suppressedSceneTapId: string = '';
 
   aboutToAppear(): void {
     const context = getContext(this) as common.UIAbilityContext;
+    this.quickScenes = this.defaultQuickScenes();
     this.deviceManager.initialize(context);
     this.restoreSmartRules(context);
   }
@@ -78,28 +97,35 @@ struct Index {
 
   private currentSmartRules(): SavedSmartRules {
     const rules = new SavedSmartRules();
-    rules.templateId = this.savedTemplateId;
-    rules.templateTitle = this.savedTemplateTitle;
-    rules.templateEnabled = this.savedTemplateEnabled;
-    rules.customTitle = this.savedCustomTitle;
-    rules.customConditionId = this.savedCustomConditionId;
-    rules.customActionId = this.savedCustomActionId;
-    rules.customCondition = this.savedCustomCondition;
-    rules.customAction = this.savedCustomAction;
-    rules.customEnabled = this.savedCustomEnabled;
+    rules.automations = this.copySavedAutomationRules(this.savedAutomationRules);
+    rules.activeQuickSceneId = this.activeQuickSceneId;
+    rules.quickScenes = this.quickScenes;
     return rules;
   }
 
   private applySavedSmartRules(rules: SavedSmartRules): void {
-    this.savedTemplateId = rules.templateId;
-    this.savedTemplateTitle = rules.templateTitle;
-    this.savedTemplateEnabled = rules.templateEnabled;
-    this.savedCustomTitle = rules.customTitle;
-    this.savedCustomConditionId = rules.customConditionId;
-    this.savedCustomActionId = rules.customActionId;
-    this.savedCustomCondition = rules.customCondition;
-    this.savedCustomAction = rules.customAction;
-    this.savedCustomEnabled = rules.customEnabled;
+    this.savedAutomationRules = this.copySavedAutomationRules(rules.automations);
+    this.activeQuickSceneId = rules.activeQuickSceneId;
+    this.quickScenes = this.mergeQuickScenes(rules.quickScenes);
+  }
+
+  private copySavedAutomationRules(source: SavedAutomationRule[]): SavedAutomationRule[] {
+    const result: SavedAutomationRule[] = [];
+    for (let index = 0; index < source.length; index++) {
+      const item = source[index];
+      const rule = new SavedAutomationRule();
+      rule.id = item.id;
+      rule.kind = item.kind;
+      rule.title = item.title;
+      rule.templateId = item.templateId;
+      rule.conditionId = item.conditionId;
+      rule.actionId = item.actionId;
+      rule.condition = item.condition;
+      rule.action = item.action;
+      rule.enabled = item.enabled;
+      result.push(rule);
+    }
+    return result;
   }
 
   build() {
@@ -168,7 +194,9 @@ struct Index {
 
   @Builder
   SmartTab() {
-    if (this.smartSavedDetailType.length > 0) {
+    if (this.sceneEditorId.length > 0) {
+      this.SceneEditorPage()
+    } else if (this.smartSavedDetailId.length > 0) {
       this.SavedRuleDetailPage()
     } else if (this.smartDetailTemplateId.length > 0) {
       this.TemplateDetailPage()
@@ -248,9 +276,34 @@ struct Index {
           .fontWeight(FontWeight.Bold)
           .fontColor('#14263A')
           .layoutWeight(1)
-        Text(this.runningRuleCountText())
-          .fontSize(12)
-          .fontColor('#748294')
+        if (this.ruleSelectionMode) {
+          Button('删除')
+            .id('smart-rule-delete-selected')
+            .height(34)
+            .fontSize(13)
+            .fontColor(Color.White)
+            .backgroundColor('#D64545')
+            .borderRadius(12)
+            .enabled(this.selectedRuleIds.length > 0)
+            .onClick(() => {
+              this.deleteSelectedRules();
+            })
+          Button('取消')
+            .id('smart-rule-cancel-selection')
+            .height(34)
+            .fontSize(13)
+            .fontColor('#D64545')
+            .backgroundColor(Color.Transparent)
+            .borderRadius(12)
+            .margin({ left: 8 })
+            .onClick(() => {
+              this.exitRuleSelection();
+            })
+        } else {
+          Text(this.runningRuleCountText())
+            .fontSize(12)
+            .fontColor('#748294')
+        }
       }
       .width('100%')
       .margin({ bottom: 12 })
@@ -272,12 +325,9 @@ struct Index {
         .backgroundColor('#F7FBFF')
         .borderRadius(18)
       } else {
-        if (this.savedTemplateTitle.length > 0) {
-          this.SavedTemplateRuleRow()
-        }
-        if (this.savedCustomTitle.length > 0) {
-          this.SavedCustomRuleRow()
-        }
+        ForEach(this.savedAutomationRules, (rule: SavedAutomationRule) => {
+          this.SavedAutomationRuleRow(rule)
+        }, (rule: SavedAutomationRule) => rule.id)
       }
     }
     .width('100%')
@@ -288,29 +338,19 @@ struct Index {
   }
 
   @Builder
-  SavedTemplateRuleRow() {
+  SavedAutomationRuleRow(rule: SavedAutomationRule) {
     Row() {
+      this.RuleStatusOrSelection(rule.id, rule.enabled)
       Column() {
-        Text(this.savedTemplateEnabled ? '启用' : '暂停')
-          .fontSize(12)
-          .fontColor(this.savedTemplateEnabled ? '#0F8F66' : '#748294')
-      }
-      .width(46)
-      .height(46)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.savedTemplateEnabled ? '#EAF8F1' : '#F2F5F9')
-      .borderRadius(17)
-      Column() {
-        Text(this.savedTemplateTitle)
+        Text(rule.title)
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
           .fontColor('#14263A')
-        Text('当 ' + this.templateCondition(this.savedTemplateId))
+        Text('当 ' + this.savedRuleCondition(rule))
           .fontSize(12)
           .fontColor('#748294')
           .margin({ top: 5 })
-        Text('执行 ' + this.templateAction(this.savedTemplateId))
+        Text('执行 ' + this.savedRuleAction(rule))
           .fontSize(12)
           .fontColor('#748294')
           .margin({ top: 2 })
@@ -318,79 +358,102 @@ struct Index {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
       .margin({ left: 12 })
-      Toggle({ type: ToggleType.Switch, isOn: this.savedTemplateEnabled })
-        .selectedColor('#1769C2')
-        .onChange((value: boolean) => {
-          this.savedTemplateEnabled = value;
-          this.persistSmartRules();
-        })
+      if (!this.ruleSelectionMode) {
+        Toggle({ type: ToggleType.Switch, isOn: rule.enabled })
+          .id('smart-rule-toggle-' + rule.id)
+          .selectedColor('#1769C2')
+          .onChange((value: boolean) => {
+            this.setSavedRuleEnabled(rule.id, value);
+            this.persistSmartRules();
+          })
+      }
     }
+    .id('smart-rule-' + rule.id)
     .width('100%')
     .padding({ top: 12, bottom: 12 })
     .onClick(() => {
-      this.smartSavedDetailType = 'template';
+      if (this.consumeSuppressedRuleTap(rule.id)) {
+        return;
+      }
+      if (this.ruleSelectionMode) {
+        this.toggleRuleSelection(rule.id);
+      } else {
+        this.smartSavedDetailId = rule.id;
+      }
     })
+    .gesture(
+      LongPressGesture({ repeat: false, duration: 500 })
+        .onAction(() => {
+          this.openRuleSelection(rule.id);
+        })
+    )
   }
 
   @Builder
-  SavedCustomRuleRow() {
-    Row() {
+  RuleStatusOrSelection(ruleType: string, enabled: boolean) {
+    if (this.ruleSelectionMode) {
+      Text(this.isRuleSelected(ruleType) ? '✓' : '')
+        .id('smart-rule-select-' + ruleType)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#1769C2')
+        .textAlign(TextAlign.Center)
+        .width(24)
+        .height(24)
+        .border({ width: 1, color: this.isRuleSelected(ruleType) ? '#1769C2' : '#AEB9C6' })
+        .borderRadius(12)
+        .backgroundColor(Color.White)
+    } else {
       Column() {
-        Text(this.savedCustomEnabled ? '启用' : '暂停')
+        Text(enabled ? '启用' : '暂停')
           .fontSize(12)
-          .fontColor(this.savedCustomEnabled ? '#0F8F66' : '#748294')
+          .fontColor(enabled ? '#0F8F66' : '#748294')
       }
       .width(46)
       .height(46)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.savedCustomEnabled ? '#EAF8F1' : '#F2F5F9')
+      .backgroundColor(enabled ? '#EAF8F1' : '#F2F5F9')
       .borderRadius(17)
-      Column() {
-        Text(this.savedCustomTitle)
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#14263A')
-        Text('当 ' + this.savedCustomCondition)
-          .fontSize(12)
-          .fontColor('#748294')
-          .margin({ top: 5 })
-        Text('执行 ' + this.savedCustomAction)
-          .fontSize(12)
-          .fontColor('#748294')
-          .margin({ top: 2 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      .margin({ left: 12 })
-      Toggle({ type: ToggleType.Switch, isOn: this.savedCustomEnabled })
-        .selectedColor('#1769C2')
-        .onChange((value: boolean) => {
-          this.savedCustomEnabled = value;
-          this.persistSmartRules();
-        })
     }
-    .width('100%')
-    .padding({ top: 12, bottom: 12 })
-    .onClick(() => {
-      this.smartSavedDetailType = 'custom';
-    })
   }
 
   @Builder
   QuickScenePanel() {
     Column() {
-      Text('常用场景')
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#14263A')
-        .width('100%')
-        .margin({ bottom: 12 })
       Row() {
-        this.SceneShortcut('回家', '开常用灯和空调', true)
-        this.SceneShortcut('离家', '关灯关空调并锁门', false)
+        Text('常用场景')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+          .layoutWeight(1)
+        Text('+')
+          .id('quick-scene-add')
+          .fontSize(28)
+          .fontColor('#1769C2')
+          .width(34)
+          .height(34)
+          .textAlign(TextAlign.Center)
+          .backgroundColor('#EAF4FF')
+          .borderRadius(12)
+          .onClick(() => {
+            this.startNewQuickScene();
+          })
       }
       .width('100%')
+      .margin({ bottom: 12 })
+
+      if (this.sceneContextId.length > 0) {
+        this.SceneContextMenu()
+      }
+      Row() {
+        this.SceneShortcut(this.quickSceneForId('home'))
+        this.SceneShortcut(this.quickSceneForId('away'))
+      }
+      .width('100%')
+      ForEach(this.customQuickScenes(), (scene: SavedQuickScene) => {
+        this.CustomSceneRow(scene)
+      }, (scene: SavedQuickScene) => scene.id)
     }
     .width('100%')
     .padding(18)
@@ -400,34 +463,305 @@ struct Index {
   }
 
   @Builder
-  SceneShortcut(title: string, subtitle: string, home: boolean) {
+  SceneShortcut(scene: SavedQuickScene) {
     Column() {
-      Text(title)
+      Text(scene.name)
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
-        .fontColor(home ? '#1769C2' : '#14263A')
-      Text(subtitle)
+        .fontColor(this.isActiveQuickScene(scene) ? '#1769C2' : '#14263A')
+      Text(this.quickSceneSubtitle(scene))
         .fontSize(12)
         .fontColor('#748294')
         .margin({ top: 6 })
     }
+    .id('quick-scene-' + scene.id)
     .layoutWeight(1)
     .height(86)
     .padding(14)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Start)
-    .backgroundColor(home ? '#EAF4FF' : '#F7FBFF')
+    .backgroundColor(this.isActiveQuickScene(scene) ? '#EAF4FF' : '#F7FBFF')
     .borderRadius(20)
-    .margin({ right: home ? 10 : 0 })
+    .margin({ right: scene.id === 'home' ? 10 : 0 })
     .onClick(() => {
-      if (home) {
-        this.deviceManager.executeHomeScene();
-        this.smartMessage = '已执行回家场景。';
-      } else {
-        this.deviceManager.executeAwayScene();
-        this.smartMessage = '已执行离家场景。';
+      if (this.consumeSuppressedSceneTap(scene.id)) {
+        return;
       }
+      this.runQuickScene(scene);
     })
+    .gesture(
+      LongPressGesture({ repeat: false, duration: 500 })
+        .onAction(() => {
+          this.openSceneContext(scene.id);
+        })
+    )
+  }
+
+  @Builder
+  CustomSceneRow(scene: SavedQuickScene) {
+    Row() {
+      Column() {
+        Text(scene.name)
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+        Text(this.quickSceneSubtitle(scene))
+          .fontSize(12)
+          .fontColor('#748294')
+          .margin({ top: 4 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Text('运行')
+        .fontSize(13)
+        .fontColor('#1769C2')
+        .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+        .backgroundColor('#EAF4FF')
+        .borderRadius(12)
+    }
+    .id('quick-scene-' + scene.id)
+    .width('100%')
+    .padding(14)
+    .backgroundColor('#F7FBFF')
+    .borderRadius(18)
+    .margin({ top: 10 })
+    .onClick(() => {
+      if (this.consumeSuppressedSceneTap(scene.id)) {
+        return;
+      }
+      this.runQuickScene(scene);
+    })
+    .gesture(
+      LongPressGesture({ repeat: false, duration: 500 })
+        .onAction(() => {
+          this.openSceneContext(scene.id);
+        })
+    )
+  }
+
+  @Builder
+  SceneContextMenu() {
+    Row() {
+      Text('已选择「' + this.quickSceneForId(this.sceneContextId).name + '」')
+        .fontSize(13)
+        .fontColor('#14263A')
+        .layoutWeight(1)
+      Button('编辑')
+        .id('quick-scene-context-edit')
+        .height(34)
+        .fontSize(13)
+        .fontColor(Color.White)
+        .backgroundColor('#1769C2')
+          .borderRadius(12)
+          .onClick(() => {
+          this.startQuickSceneEditor(this.quickSceneForId(this.sceneContextId));
+        })
+      if (!this.quickSceneForId(this.sceneContextId).builtIn) {
+        Button('删除')
+          .id('quick-scene-context-delete')
+          .height(34)
+          .fontSize(13)
+          .fontColor('#D64545')
+          .backgroundColor(Color.Transparent)
+          .borderRadius(12)
+          .margin({ left: 6 })
+          .onClick(() => {
+            this.deleteQuickScene(this.sceneContextId);
+          })
+      }
+      Button('取消')
+        .id('quick-scene-context-cancel')
+        .height(34)
+        .fontSize(13)
+        .fontColor('#748294')
+        .backgroundColor(Color.Transparent)
+        .borderRadius(12)
+        .margin({ left: 6 })
+        .onClick(() => {
+          this.sceneContextId = '';
+        })
+    }
+    .width('100%')
+    .padding(12)
+    .backgroundColor('#F7FBFF')
+    .borderRadius(16)
+    .margin({ bottom: 10 })
+  }
+
+  @Builder
+  SceneEditorPage() {
+    Scroll() {
+      Column() {
+        Row() {
+          Text('‹')
+            .id('quick-scene-editor-back')
+            .fontSize(38)
+            .fontColor('#14263A')
+            .width(46)
+            .height(46)
+            .onClick(() => {
+              this.sceneEditorId = '';
+            })
+          Text(this.sceneEditorId === 'new' ? '新建常用场景' : '编辑常用场景')
+            .fontSize(24)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .margin({ bottom: 18 })
+
+        Text('场景名称')
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+          .width('100%')
+        TextInput({ text: this.sceneEditorName, placeholder: '例如：睡前模式' })
+          .id('quick-scene-editor-name')
+          .width('100%')
+          .height(46)
+          .backgroundColor(Color.White)
+          .borderRadius(14)
+          .margin({ top: 8, bottom: 16 })
+          .onChange((value: string) => {
+            this.sceneEditorName = value;
+          })
+
+        Text('查找房间或设备')
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+          .width('100%')
+        TextInput({ text: this.sceneEditorSearch, placeholder: '例如：主卧、空调' })
+          .id('quick-scene-editor-search')
+          .width('100%')
+          .height(42)
+          .backgroundColor(Color.White)
+          .borderRadius(14)
+          .margin({ top: 8, bottom: 12 })
+          .onChange((value: string) => {
+            this.sceneEditorSearch = value;
+          })
+
+        Text('为每台可控制设备选择操作；默认均为“维持”。')
+          .fontSize(12)
+          .fontColor('#748294')
+          .width('100%')
+          .margin({ bottom: 10 })
+
+        if (this.sceneEditorRoomIds().length === 0) {
+          Text('暂未同步到可编辑的设备，请先连接网关并同步设备。')
+            .fontSize(13)
+            .fontColor('#748294')
+            .width('100%')
+            .padding(18)
+            .backgroundColor(Color.White)
+            .borderRadius(18)
+        } else {
+          ForEach(this.sceneEditorRoomIds(), (roomId: string) => {
+            this.SceneRoomEditorGroup(roomId)
+          }, (roomId: string) => roomId)
+        }
+
+        if (this.sceneEditorId === 'home' || this.sceneEditorId === 'away') {
+          Button('恢复默认场景')
+            .id('quick-scene-editor-reset')
+            .width('100%')
+            .height(46)
+            .fontColor('#1769C2')
+            .backgroundColor(Color.Transparent)
+            .borderRadius(16)
+            .margin({ top: 14 })
+            .onClick(() => {
+              this.restoreDefaultQuickScene();
+            })
+        }
+
+        Button(this.smartBusy ? '保存中' : '保存场景')
+          .id('quick-scene-editor-save')
+          .width('100%')
+          .height(50)
+          .fontColor(Color.White)
+          .backgroundColor('#1769C2')
+          .borderRadius(18)
+          .enabled(!this.smartBusy)
+          .margin({ top: 14, bottom: 18 })
+          .onClick(() => {
+            this.saveQuickScene();
+          })
+      }
+      .width('100%')
+      .padding({ left: 18, right: 18, top: 34, bottom: 18 })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#DCEAF2')
+    .scrollBar(BarState.Off)
+  }
+
+  @Builder
+  SceneRoomEditorGroup(roomId: string) {
+    Column() {
+      Text(DeviceRegistry.getRoomLabel(roomId))
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+        .width('100%')
+        .margin({ bottom: 8 })
+      ForEach(this.sceneEditorDevices(roomId), (device: DeviceInfo) => {
+        this.SceneDeviceOperationRow(device)
+      }, (device: DeviceInfo) => device.id)
+    }
+    .width('100%')
+    .padding(14)
+    .backgroundColor(Color.White)
+    .borderRadius(20)
+    .margin({ bottom: 12 })
+  }
+
+  @Builder
+  SceneDeviceOperationRow(device: DeviceInfo) {
+    Row() {
+      Column() {
+        Text(device.name)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#14263A')
+        Text(this.sceneDeviceKindLabel(device))
+          .fontSize(12)
+          .fontColor('#748294')
+          .margin({ top: 3 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Row() {
+        Text(this.sceneOperationLabel(device, this.currentSceneOperation(device)))
+          .id('quick-scene-operation-value-' + device.id)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#1769C2')
+          .width(64)
+          .textAlign(TextAlign.Center)
+        Select(this.sceneOperationOptions(device))
+          .id('quick-scene-operation-' + device.id)
+          .selected(this.sceneOperationIndex(device))
+          .font({ size: 13, weight: FontWeight.Medium })
+          .fontColor('#1769C2')
+          .width(42)
+          .backgroundColor(Color.Transparent)
+          .onSelect((index: number) => {
+            this.setSceneDeviceOperation(
+              device.id,
+              this.availableSceneOperations(device)[index]
+            );
+          })
+      }
+      .height(42)
+      .backgroundColor('#EAF4FF')
+      .borderRadius(12)
+    }
+    .width('100%')
+    .padding({ top: 10, bottom: 10 })
   }
 
   @Builder
@@ -724,7 +1058,7 @@ struct Index {
           .width(46)
           .height(46)
           .onClick(() => {
-            this.smartSavedDetailType = '';
+            this.smartSavedDetailId = '';
           })
         Blank()
       }
@@ -745,11 +1079,7 @@ struct Index {
         Toggle({ type: ToggleType.Switch, isOn: this.savedDetailEnabled() })
           .selectedColor('#1769C2')
           .onChange((value: boolean) => {
-            if (this.smartSavedDetailType === 'template') {
-              this.savedTemplateEnabled = value;
-            } else {
-              this.savedCustomEnabled = value;
-            }
+            this.setSavedRuleEnabled(this.smartSavedDetailId, value);
             this.persistSmartRules();
           })
       }
@@ -765,15 +1095,26 @@ struct Index {
 
       Blank()
       Button(this.smartBusy ? '运行中' : '运行一次')
+        .id('smart-rule-run-once')
         .width('100%')
         .height(50)
         .fontColor(Color.White)
         .backgroundColor('#1769C2')
         .borderRadius(18)
         .enabled(!this.smartBusy)
-        .margin({ bottom: 18 })
+        .margin({ bottom: 10 })
         .onClick(() => {
           this.runSavedRuleOnce();
+        })
+      Button('删除规则')
+        .id('smart-rule-delete')
+        .width('100%')
+        .height(50)
+        .fontColor(Color.White)
+        .backgroundColor('#D64545')
+        .borderRadius(18)
+        .onClick(() => {
+          this.deleteSavedRule(this.smartSavedDetailId);
         })
     }
     .width('100%')
@@ -850,6 +1191,450 @@ struct Index {
     .backgroundColor(Color.White)
   }
 
+  private enterRuleSelection(ruleId: string): void {
+    this.ruleSelectionMode = true;
+    this.selectedRuleIds = [ruleId];
+  }
+
+  private openRuleSelection(ruleId: string): void {
+    this.suppressedRuleTap = ruleId;
+    this.enterRuleSelection(ruleId);
+    setTimeout(() => {
+      if (this.suppressedRuleTap === ruleId) {
+        this.suppressedRuleTap = '';
+      }
+    }, 300);
+  }
+
+  private consumeSuppressedRuleTap(ruleId: string): boolean {
+    if (this.suppressedRuleTap !== ruleId) {
+      return false;
+    }
+    this.suppressedRuleTap = '';
+    return true;
+  }
+
+  private exitRuleSelection(): void {
+    this.ruleSelectionMode = false;
+    this.selectedRuleIds = [];
+  }
+
+  private isRuleSelected(ruleId: string): boolean {
+    return this.selectedRuleIds.indexOf(ruleId) >= 0;
+  }
+
+  private toggleRuleSelection(ruleId: string): void {
+    if (!this.ruleSelectionMode) {
+      return;
+    }
+    if (this.isRuleSelected(ruleId)) {
+      this.selectedRuleIds = this.selectedRuleIds.filter(
+        (value: string) => value !== ruleId
+      );
+    } else {
+      this.selectedRuleIds = [...this.selectedRuleIds, ruleId];
+    }
+  }
+
+  private removeSavedRule(ruleId: string): void {
+    this.savedAutomationRules = this.savedAutomationRules.filter(
+      (rule: SavedAutomationRule) => rule.id !== ruleId
+    );
+  }
+
+  private async deleteSavedRule(ruleId: string): Promise<void> {
+    this.removeSavedRule(ruleId);
+    this.smartSavedDetailId = '';
+    this.exitRuleSelection();
+    this.smartMessage = await this.persistSmartRules() ?
+      '规则已删除。' : '规则已删除，但本地保存失败。';
+  }
+
+  private async deleteSelectedRules(): Promise<void> {
+    if (this.selectedRuleIds.length === 0) {
+      return;
+    }
+    const deletedCount = this.selectedRuleIds.length;
+    const selected = this.selectedRuleIds;
+    this.savedAutomationRules = this.savedAutomationRules.filter(
+      (rule: SavedAutomationRule) => selected.indexOf(rule.id) < 0
+    );
+    this.exitRuleSelection();
+    this.smartMessage = await this.persistSmartRules() ?
+      '已删除 ' + deletedCount.toString() + ' 条规则。' :
+      '已删除规则，但本地保存失败。';
+  }
+
+  private defaultQuickScenes(): SavedQuickScene[] {
+    return [this.defaultQuickScene('home'), this.defaultQuickScene('away')];
+  }
+
+  private defaultQuickScene(id: string): SavedQuickScene {
+    const scene = new SavedQuickScene();
+    scene.id = id;
+    scene.builtIn = id === 'home' || id === 'away';
+    scene.customized = false;
+    if (id === 'home') {
+      scene.name = '回家';
+      scene.actions = [
+        this.sceneAction('light-living-01', 'on'),
+        this.sceneAction('light-living-02', 'on'),
+        this.sceneAction('ac-living-01', 'on'),
+        this.sceneAction('door-entry-01', 'off')
+      ];
+      return scene;
+    }
+    if (id === 'away') {
+      scene.name = '离家';
+      scene.actions = [
+        this.sceneAction('light-living-01', 'off'),
+        this.sceneAction('light-living-02', 'off'),
+        this.sceneAction('light-master-01', 'off'),
+        this.sceneAction('light-bedroom-01', 'off'),
+        this.sceneAction('light-bathroom-01', 'off'),
+        this.sceneAction('ac-living-01', 'off'),
+        this.sceneAction('ac-master-01', 'off'),
+        this.sceneAction('door-entry-01', 'off')
+      ];
+      return scene;
+    }
+    scene.name = '未命名场景';
+    return scene;
+  }
+
+  private sceneAction(deviceId: string, operation: string): SceneDeviceAction {
+    const action = new SceneDeviceAction();
+    action.deviceId = deviceId;
+    action.operation = operation;
+    return action;
+  }
+
+  private copyQuickScene(source: SavedQuickScene): SavedQuickScene {
+    const scene = new SavedQuickScene();
+    scene.id = source.id;
+    scene.name = source.name;
+    scene.builtIn = source.builtIn;
+    scene.customized = source.customized;
+    for (let index = 0; index < source.actions.length; index++) {
+      scene.actions.push(this.sceneAction(
+        source.actions[index].deviceId,
+        source.actions[index].operation
+      ));
+    }
+    return scene;
+  }
+
+  private mergeQuickScenes(storedScenes: SavedQuickScene[]): SavedQuickScene[] {
+    const merged = this.defaultQuickScenes();
+    for (let index = 0; index < storedScenes.length; index++) {
+      const stored = storedScenes[index];
+      if (stored.id === 'home' || stored.id === 'away') {
+        for (let defaultIndex = 0; defaultIndex < merged.length; defaultIndex++) {
+          if (merged[defaultIndex].id === stored.id) {
+            const scene = this.copyQuickScene(stored);
+            scene.builtIn = true;
+            merged[defaultIndex] = scene;
+            break;
+          }
+        }
+      } else if (!stored.builtIn) {
+        merged.push(this.copyQuickScene(stored));
+      }
+    }
+    return merged;
+  }
+
+  private quickSceneForId(id: string): SavedQuickScene {
+    for (let index = 0; index < this.quickScenes.length; index++) {
+      if (this.quickScenes[index].id === id) {
+        return this.quickScenes[index];
+      }
+    }
+    return this.defaultQuickScene(id);
+  }
+
+  private customQuickScenes(): SavedQuickScene[] {
+    const result: SavedQuickScene[] = [];
+    for (let index = 0; index < this.quickScenes.length; index++) {
+      if (!this.quickScenes[index].builtIn) {
+        result.push(this.quickScenes[index]);
+      }
+    }
+    return result;
+  }
+
+  private quickSceneSubtitle(scene: SavedQuickScene): string {
+    if (!scene.customized && scene.id === 'home') {
+      return '开启客厅灯光和空调，并锁门';
+    }
+    if (!scene.customized && scene.id === 'away') {
+      return '关闭灯光和空调，并锁门';
+    }
+    let activeCount = 0;
+    for (let index = 0; index < scene.actions.length; index++) {
+      if (scene.actions[index].operation !== 'keep') {
+        activeCount++;
+      }
+    }
+    return activeCount.toString() + ' 台设备将执行操作';
+  }
+
+  private openSceneContext(sceneId: string): void {
+    this.suppressedSceneTapId = sceneId;
+    this.sceneContextId = sceneId;
+    setTimeout(() => {
+      if (this.suppressedSceneTapId === sceneId) {
+        this.suppressedSceneTapId = '';
+      }
+    }, 300);
+  }
+
+  private consumeSuppressedSceneTap(sceneId: string): boolean {
+    if (this.suppressedSceneTapId !== sceneId) {
+      return false;
+    }
+    this.suppressedSceneTapId = '';
+    return true;
+  }
+
+  private isActiveQuickScene(scene: SavedQuickScene): boolean {
+    return (scene.id === 'home' || scene.id === 'away') && scene.id === this.activeQuickSceneId;
+  }
+
+  private async runQuickScene(scene: SavedQuickScene): Promise<void> {
+    if (this.smartBusy) {
+      return;
+    }
+    this.smartBusy = true;
+    this.smartMessage = '';
+    try {
+      if (!scene.customized && scene.id === 'home') {
+        await this.deviceManager.executeHomeScene();
+      } else if (!scene.customized && scene.id === 'away') {
+        await this.deviceManager.executeAwayScene();
+      } else {
+        await this.deviceManager.executeConfiguredScene(scene.actions);
+      }
+      if (scene.id === 'home' || scene.id === 'away') {
+        this.activeQuickSceneId = scene.id;
+        const persisted = await this.persistSmartRules();
+        this.smartMessage = persisted ?
+          '已下发「' + scene.name + '」场景。' :
+          '已下发「' + scene.name + '」场景，但状态未能保存。';
+      } else {
+        this.smartMessage = '已下发「' + scene.name + '」场景。';
+      }
+    } catch (error) {
+      this.smartMessage = '场景执行失败，请确认网关在线后再试。';
+    } finally {
+      this.smartBusy = false;
+    }
+  }
+
+  private startNewQuickScene(): void {
+    if (this.quickScenes.length >= 8) {
+      this.smartMessage = '常用场景数量已达到上限，请先删除一个自定义场景。';
+      return;
+    }
+    this.sceneContextId = '';
+    this.sceneEditorId = 'new';
+    this.sceneEditorName = '';
+    this.sceneEditorSearch = '';
+    this.sceneEditorActions = this.editorActionsFor(new SavedQuickScene());
+  }
+
+  private startQuickSceneEditor(scene: SavedQuickScene): void {
+    this.sceneContextId = '';
+    this.sceneEditorId = scene.id;
+    this.sceneEditorName = scene.name;
+    this.sceneEditorSearch = '';
+    this.sceneEditorActions = this.editorActionsFor(scene);
+  }
+
+  private editorActionsFor(scene: SavedQuickScene): SceneDeviceAction[] {
+    const result: SceneDeviceAction[] = [];
+    for (let index = 0; index < this.deviceManager.devices.length; index++) {
+      const device = this.deviceManager.devices[index];
+      if (device.type === DeviceType.ENVIRONMENT) {
+        continue;
+      }
+      let operation = 'keep';
+      for (let actionIndex = 0; actionIndex < scene.actions.length; actionIndex++) {
+        if (scene.actions[actionIndex].deviceId === device.id) {
+          operation = scene.actions[actionIndex].operation;
+          break;
+        }
+      }
+      result.push(this.sceneAction(device.id, operation));
+    }
+    return result;
+  }
+
+  private sceneEditorRoomIds(): string[] {
+    const result: string[] = [];
+    const roomIds = this.deviceManager.getRoomIds();
+    for (let index = 0; index < roomIds.length; index++) {
+      if (this.sceneEditorDevices(roomIds[index]).length > 0) {
+        result.push(roomIds[index]);
+      }
+    }
+    return result;
+  }
+
+  private sceneEditorDevices(roomId: string): DeviceInfo[] {
+    const query = this.sceneEditorSearch.trim().toLowerCase();
+    const roomMatches = DeviceRegistry.getRoomLabel(roomId).toLowerCase().indexOf(query) >= 0;
+    const devices = this.deviceManager.getDevicesByRoom(roomId);
+    const result: DeviceInfo[] = [];
+    for (let index = 0; index < devices.length; index++) {
+      const device = devices[index];
+      if (device.type === DeviceType.ENVIRONMENT) {
+        continue;
+      }
+      if (
+        query.length === 0 ||
+        roomMatches ||
+        device.name.toLowerCase().indexOf(query) >= 0
+      ) {
+        result.push(device);
+      }
+    }
+    return result;
+  }
+
+  private availableSceneOperations(device: DeviceInfo): string[] {
+    if (device.type === DeviceType.ENVIRONMENT) {
+      return ['keep'];
+    }
+    return ['keep', 'on', 'off'];
+  }
+
+  private sceneOperationOptions(device: DeviceInfo): SceneOperationOption[] {
+    const options: SceneOperationOption[] = [];
+    const operations = this.availableSceneOperations(device);
+    for (let index = 0; index < operations.length; index++) {
+      const option = new SceneOperationOption();
+      option.value = this.sceneOperationLabel(device, operations[index]);
+      options.push(option);
+    }
+    return options;
+  }
+
+  private sceneOperationLabel(device: DeviceInfo, operation: string): string {
+    if (operation === 'keep') {
+      return '维持';
+    }
+    if (device.type === DeviceType.DOOR_LOCK) {
+      return operation === 'on' ? '解锁' : '上锁';
+    }
+    return operation === 'on' ? '开启' : '关闭';
+  }
+
+  private currentSceneOperation(device: DeviceInfo): string {
+    for (let index = 0; index < this.sceneEditorActions.length; index++) {
+      if (this.sceneEditorActions[index].deviceId === device.id) {
+        return this.sceneEditorActions[index].operation;
+      }
+    }
+    return 'keep';
+  }
+
+  private sceneOperationIndex(device: DeviceInfo): number {
+    const operation = this.currentSceneOperation(device);
+    const operations = this.availableSceneOperations(device);
+    const found = operations.indexOf(operation);
+    return found >= 0 ? found : 0;
+  }
+
+  private setSceneDeviceOperation(deviceId: string, operation: string): void {
+    const updated: SceneDeviceAction[] = [];
+    let found = false;
+    for (let index = 0; index < this.sceneEditorActions.length; index++) {
+      const action = this.sceneEditorActions[index];
+      if (action.deviceId === deviceId) {
+        updated.push(this.sceneAction(deviceId, operation));
+        found = true;
+      } else {
+        updated.push(this.sceneAction(action.deviceId, action.operation));
+      }
+    }
+    if (!found) {
+      updated.push(this.sceneAction(deviceId, operation));
+    }
+    this.sceneEditorActions = updated;
+  }
+
+  private sceneDeviceKindLabel(device: DeviceInfo): string {
+    if (device.type === DeviceType.LIGHT) {
+      return '灯光';
+    }
+    if (device.type === DeviceType.AIR_CONDITIONER) {
+      return '空调';
+    }
+    return '门锁';
+  }
+
+  private async saveQuickScene(): Promise<void> {
+    const name = this.sceneEditorName.trim();
+    if (name.length === 0) {
+      this.smartMessage = '请先填写场景名称。';
+      return;
+    }
+    this.smartBusy = true;
+    const scene = new SavedQuickScene();
+    scene.id = this.sceneEditorId === 'new' ?
+      'custom-' + Date.now().toString() : this.sceneEditorId;
+    scene.name = name;
+    const previous = this.quickSceneForId(this.sceneEditorId);
+    scene.builtIn = previous.builtIn;
+    scene.customized = true;
+    const configuredActions = new SavedQuickScene();
+    configuredActions.actions = this.sceneEditorActions;
+    scene.actions = this.editorActionsFor(configuredActions);
+    const scenes: SavedQuickScene[] = [];
+    let replaced = false;
+    for (let index = 0; index < this.quickScenes.length; index++) {
+      if (this.quickScenes[index].id === scene.id) {
+        scenes.push(scene);
+        replaced = true;
+      } else {
+        scenes.push(this.copyQuickScene(this.quickScenes[index]));
+      }
+    }
+    if (!replaced) {
+      scenes.push(scene);
+    }
+    this.quickScenes = scenes;
+    const persisted = await this.persistSmartRules();
+    this.sceneEditorId = '';
+    this.smartMessage = persisted ? '场景已保存。' : '场景已更新，但本地保存失败。';
+    this.smartBusy = false;
+  }
+
+  private async restoreDefaultQuickScene(): Promise<void> {
+    const scene = this.defaultQuickScene(this.sceneEditorId);
+    const scenes: SavedQuickScene[] = [];
+    for (let index = 0; index < this.quickScenes.length; index++) {
+      scenes.push(this.quickScenes[index].id === scene.id ? scene :
+        this.copyQuickScene(this.quickScenes[index]));
+    }
+    this.quickScenes = scenes;
+    const persisted = await this.persistSmartRules();
+    this.sceneEditorId = '';
+    this.smartMessage = persisted ? '已恢复默认场景。' : '已恢复默认场景，但本地保存失败。';
+  }
+
+  private async deleteQuickScene(id: string): Promise<void> {
+    const scene = this.quickSceneForId(id);
+    if (scene.builtIn) {
+      return;
+    }
+    this.quickScenes = this.quickScenes.filter((item: SavedQuickScene) => item.id !== id);
+    this.sceneContextId = '';
+    this.smartMessage = await this.persistSmartRules() ?
+      '常用场景已删除。' : '常用场景已删除，但本地保存失败。';
+  }
+
   private async createTemplate(templateId: string): Promise<void> {
     if (templateId.length === 0) {
       return;
@@ -858,9 +1643,13 @@ struct Index {
     this.smartMessage = '';
     try {
       await this.deviceManager.applySmartTemplate(templateId);
-      this.savedTemplateId = templateId;
-      this.savedTemplateTitle = this.templateTitle(templateId);
-      this.savedTemplateEnabled = true;
+      const rule = new SavedAutomationRule();
+      rule.id = this.newSavedAutomationId('template');
+      rule.kind = 'template';
+      rule.title = this.templateTitle(templateId);
+      rule.templateId = templateId;
+      rule.enabled = true;
+      this.savedAutomationRules = [...this.savedAutomationRules, rule];
       this.smartDetailTemplateId = '';
       this.smartMessage = await this.persistSmartRules() ?
         '已保存到我的智能，并已下发到网关执行。' :
@@ -877,12 +1666,16 @@ struct Index {
     this.smartMessage = '';
     try {
       await this.deviceManager.applyCustomAutomation(this.customCondition, this.customAction);
-      this.savedCustomTitle = this.conditionLabel() + '自动化';
-      this.savedCustomConditionId = this.customCondition;
-      this.savedCustomActionId = this.customAction;
-      this.savedCustomCondition = this.conditionLabel();
-      this.savedCustomAction = this.actionLabel();
-      this.savedCustomEnabled = true;
+      const rule = new SavedAutomationRule();
+      rule.id = this.newSavedAutomationId('custom');
+      rule.kind = 'custom';
+      rule.title = this.conditionLabel() + '自动化';
+      rule.conditionId = this.customCondition;
+      rule.actionId = this.customAction;
+      rule.condition = this.conditionLabel();
+      rule.action = this.actionLabel();
+      rule.enabled = true;
+      this.savedAutomationRules = [...this.savedAutomationRules, rule];
       this.showCustomComposer = false;
       this.smartMessage = await this.persistSmartRules() ?
         '自动化已创建，并已下发相关网关控制。' :
@@ -894,8 +1687,12 @@ struct Index {
     }
   }
 
+  private newSavedAutomationId(kind: string): string {
+    return kind + '-' + Date.now().toString() + '-' + this.savedAutomationRules.length.toString();
+  }
+
   private hasSavedSmartRules(): boolean {
-    return this.savedTemplateTitle.length > 0 || this.savedCustomTitle.length > 0;
+    return this.savedAutomationRules.length > 0;
   }
 
   private smartSubtitle(): string {
@@ -907,11 +1704,10 @@ struct Index {
 
   private runningRuleCountText(): string {
     let count = 0;
-    if (this.savedTemplateTitle.length > 0 && this.savedTemplateEnabled) {
-      count += 1;
-    }
-    if (this.savedCustomTitle.length > 0 && this.savedCustomEnabled) {
-      count += 1;
+    for (let index = 0; index < this.savedAutomationRules.length; index++) {
+      if (this.savedAutomationRules[index].enabled) {
+        count++;
+      }
     }
     return count.toFixed(0) + ' 条启用';
   }
@@ -1065,45 +1861,76 @@ struct Index {
     return this.templateAction('motionLight');
   }
 
-  private savedDetailTitle(): string {
-    if (this.smartSavedDetailType === 'template') {
-      return this.savedTemplateTitle;
+  private savedRuleForId(ruleId: string): SavedAutomationRule {
+    for (let index = 0; index < this.savedAutomationRules.length; index++) {
+      if (this.savedAutomationRules[index].id === ruleId) {
+        return this.savedAutomationRules[index];
+      }
     }
-    return this.savedCustomTitle;
+    return new SavedAutomationRule();
+  }
+
+  private savedRuleCondition(rule: SavedAutomationRule): string {
+    if (rule.kind === 'template') {
+      return this.templateCondition(rule.templateId);
+    }
+    return rule.condition;
+  }
+
+  private savedRuleAction(rule: SavedAutomationRule): string {
+    if (rule.kind === 'template') {
+      return this.templateAction(rule.templateId);
+    }
+    return rule.action;
+  }
+
+  private savedDetailTitle(): string {
+    return this.savedRuleForId(this.smartSavedDetailId).title;
   }
 
   private savedDetailCondition(): string {
-    if (this.smartSavedDetailType === 'template') {
-      return this.templateCondition(this.savedTemplateId);
-    }
-    return this.savedCustomCondition;
+    return this.savedRuleCondition(this.savedRuleForId(this.smartSavedDetailId));
   }
 
   private savedDetailAction(): string {
-    if (this.smartSavedDetailType === 'template') {
-      return this.templateAction(this.savedTemplateId);
-    }
-    return this.savedCustomAction;
+    return this.savedRuleAction(this.savedRuleForId(this.smartSavedDetailId));
   }
 
   private savedDetailEnabled(): boolean {
-    if (this.smartSavedDetailType === 'template') {
-      return this.savedTemplateEnabled;
+    return this.savedRuleForId(this.smartSavedDetailId).enabled;
+  }
+
+  private setSavedRuleEnabled(ruleId: string, enabled: boolean): void {
+    const result: SavedAutomationRule[] = [];
+    for (let index = 0; index < this.savedAutomationRules.length; index++) {
+      const rule = this.savedAutomationRules[index];
+      const updated = new SavedAutomationRule();
+      updated.id = rule.id;
+      updated.kind = rule.kind;
+      updated.title = rule.title;
+      updated.templateId = rule.templateId;
+      updated.conditionId = rule.conditionId;
+      updated.actionId = rule.actionId;
+      updated.condition = rule.condition;
+      updated.action = rule.action;
+      updated.enabled = rule.id === ruleId ? enabled : rule.enabled;
+      result.push(updated);
     }
-    return this.savedCustomEnabled;
+    this.savedAutomationRules = result;
   }
 
   private async runSavedRuleOnce(): Promise<void> {
     this.smartBusy = true;
     this.smartMessage = '';
     try {
-      if (this.smartSavedDetailType === 'template') {
-        await this.deviceManager.applySmartTemplate(this.savedTemplateId);
+      const rule = this.savedRuleForId(this.smartSavedDetailId);
+      if (rule.kind === 'template') {
+        await this.deviceManager.applySmartTemplate(rule.templateId);
       } else {
-        await this.deviceManager.applyCustomAutomation(this.savedCustomConditionId, this.savedCustomActionId);
+        await this.deviceManager.applyCustomAutomation(rule.conditionId, rule.actionId);
       }
       this.smartMessage = '规则已运行一次。';
-      this.smartSavedDetailType = '';
+      this.smartSavedDetailId = '';
     } catch (error) {
       this.smartMessage = '运行失败，请确认网关在线后再试。';
     } finally {

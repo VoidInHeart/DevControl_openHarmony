@@ -136,6 +136,12 @@ export class SceneExecutionDetail {
   errorCode: string = '';
 }
 
+/** A locally configured quick-scene action. */
+export class SceneDeviceAction {
+  deviceId: string = '';
+  operation: string = 'keep';
+}
+
 export class EnvironmentHistoryPoint {
   timestamp: number = 0;
   temperatureCelsius: number = 0;
