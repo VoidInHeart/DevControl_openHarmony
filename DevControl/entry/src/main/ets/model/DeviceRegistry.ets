@@ -74,12 +74,12 @@ export class DeviceFeature {
 
 export class DeviceRegistry {
   private static readonly capabilities: DeviceCapability[] = [
-    new DeviceCapability(DeviceType.LIGHT, '灯光', '💡', [
+    new DeviceCapability(DeviceType.LIGHT, '灯光', '○', [
       'setPower', 'setBrightness', 'setAutomationConfig'
     ]),
-    new DeviceCapability(DeviceType.ENVIRONMENT, '环境', '🌿', []),
-    new DeviceCapability(DeviceType.AIR_CONDITIONER, '空调', '❄️', [
-      'setPower', 'setMode', 'setTemperature', 'setBrand'
+    new DeviceCapability(DeviceType.ENVIRONMENT, '环境', '≈', []),
+    new DeviceCapability(DeviceType.AIR_CONDITIONER, '空调', '❄', [
+      'setPower', 'setMode', 'setTemperature', 'setFanSpeed', 'setBrand'
     ]),
     new DeviceCapability(DeviceType.DOOR_LOCK, '门锁', '🔒', [
       'lock', 'unlock', 'setAutoLockConfig'
@@ -87,10 +87,10 @@ export class DeviceRegistry {
   ];
 
   private static readonly homeFeatures: DeviceFeature[] = [
-    new DeviceFeature('lighting', '灯光', '💡', [DeviceType.LIGHT]),
+    new DeviceFeature('lighting', '灯光', '○', [DeviceType.LIGHT]),
     // Curtain support is reserved for gateways that expose a curtain adapter.
-    new DeviceFeature('curtains', '窗帘', '🪟', []),
-    new DeviceFeature('environment', '环境', '🌿', [
+    new DeviceFeature('curtains', '窗帘', '▥', []),
+    new DeviceFeature('environment', '环境', '≈', [
       DeviceType.ENVIRONMENT, DeviceType.AIR_CONDITIONER
     ]),
     new DeviceFeature('locks', '门锁', '🔒', [DeviceType.DOOR_LOCK], true)
@@ -273,7 +273,7 @@ export class DeviceRegistry {
     }
     if (device.type === DeviceType.LIGHT) {
       const light = device as LightDevice;
-      result.icon = light.state.power ? '💡' : '○';
+      result.icon = light.state.power ? '●' : '○';
       result.summary = light.state.power ?
         '已开启 · ' + light.state.brightness.toFixed(0) + '%' : '已关闭';
       return result;
@@ -286,7 +286,7 @@ export class DeviceRegistry {
     }
     if (device.type === DeviceType.AIR_CONDITIONER) {
       const airConditioner = device as AirConditionerDevice;
-      result.icon = airConditioner.state.power ? '❄️' : '○';
+      result.icon = airConditioner.state.power ? '❄' : '○';
       result.summary = airConditioner.state.power ?
         airConditioner.state.mode + ' · ' +
         airConditioner.state.targetTemperatureCelsius.toFixed(0) + '°C' : '已关闭';

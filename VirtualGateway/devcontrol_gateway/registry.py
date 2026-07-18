@@ -138,16 +138,21 @@ class DeviceRegistry:
         return self.public_device(device)
 
     def _execute_away(self) -> list[dict[str, object]]:
-        actions = (
-            ("light-living-01", (("setPower", {"power": False}),)),
-            ("ac-living-01", (("setPower", {"power": False}),)),
-            ("door-entry-01", (("lock", {}),)),
+        actions = tuple(
+            (device_id, (("setPower", {"power": False}),))
+            for device_id, device in self.devices.items()
+            if device["type"] in {"light", "airConditioner"}
+        ) + tuple(
+            (device_id, (("lock", {}),))
+            for device_id, device in self.devices.items()
+            if device["type"] == "doorLock"
         )
         return self._execute_scene_actions(actions)
 
     def _execute_home(self) -> list[dict[str, object]]:
         actions = (
             ("light-living-01", (("setBrightness", {"brightness": 70}),)),
+            ("light-living-02", (("setBrightness", {"brightness": 45}),)),
             (
                 "ac-living-01",
                 (

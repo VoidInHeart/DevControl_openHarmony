@@ -25,6 +25,13 @@ export class ACMode {
   static readonly FAN: string = 'fan';
 }
 
+export class ACFanSpeed {
+  static readonly AUTO: string = 'auto';
+  static readonly LOW: string = 'low';
+  static readonly MEDIUM: string = 'medium';
+  static readonly HIGH: string = 'high';
+}
+
 export class ConnectionState {
   static readonly DISCONNECTED: string = 'disconnected';
   static readonly CONNECTING: string = 'connecting';
@@ -61,6 +68,7 @@ export class AirConditionerState {
   power: boolean = false;
   mode: string = ACMode.AUTO;
   targetTemperatureCelsius: number = 24;
+  fanSpeed: string = ACFanSpeed.AUTO;
   running: boolean = false;
   lastAdapterFrame: string = '';
 }
@@ -132,6 +140,12 @@ export class SceneExecutionDetail {
   deviceId: string = '';
   success: boolean = false;
   errorCode: string = '';
+}
+
+/** A locally configured quick-scene action. */
+export class SceneDeviceAction {
+  deviceId: string = '';
+  operation: string = 'keep';
 }
 
 export class EnvironmentHistoryPoint {
@@ -293,6 +307,15 @@ export function parseDevice(raw: Record<string, Object>): DeviceInfo {
     }
     device.state.targetTemperatureCelsius =
       requireNumber(raw, 'targetTemperatureCelsius', 16, 30, true);
+    device.state.fanSpeed = requireString(raw, 'fanSpeed');
+    if (
+      device.state.fanSpeed !== ACFanSpeed.AUTO &&
+      device.state.fanSpeed !== ACFanSpeed.LOW &&
+      device.state.fanSpeed !== ACFanSpeed.MEDIUM &&
+      device.state.fanSpeed !== ACFanSpeed.HIGH
+    ) {
+      throw new Error('Unsupported air-conditioner fan speed: ' + device.state.fanSpeed);
+    }
     device.state.running = requireBoolean(raw, 'running');
     device.state.lastAdapterFrame = optionalString(raw, 'lastAdapterFrame');
     return device;
@@ -390,6 +413,7 @@ export function serializeDevice(device: DeviceInfo): Record<string, Object> {
     raw['power'] = ac.state.power;
     raw['mode'] = ac.state.mode;
     raw['targetTemperatureCelsius'] = ac.state.targetTemperatureCelsius;
+    raw['fanSpeed'] = ac.state.fanSpeed;
     raw['running'] = ac.state.running;
     raw['lastAdapterFrame'] = ac.state.lastAdapterFrame;
   } else {

@@ -2,6 +2,8 @@ import { common } from '@kit.AbilityKit';
 import native from 'libentry.so';
 import {
   AccessLogEntry,
+  ACFanSpeed,
+  ACMode,
   AirConditionerDevice,
   AlertEntry,
   CommandPayload,
@@ -14,6 +16,7 @@ import {
   GatewaySession,
   LightDevice,
   parseDevice,
+  SceneDeviceAction,
   SceneExecutionDetail
 } from './DeviceModel';
 import { GatewayTransport, GatewayTransportListener } from '../service/GatewayTransport';
@@ -23,6 +26,11 @@ import { GatewaySessionStore } from '../service/GatewaySessionStore';
 import { PairingPreferenceStore } from '../service/PairingPreferenceStore';
 import { WssGatewayTransport } from '../service/WssGatewayTransport';
 import { DeviceRegistry } from './DeviceRegistry';
+import {
+  DeviceControl,
+  DeviceControlKind,
+  GenericDevice
+} from './GenericDeviceModel';
 
 @Observed
 export class DeviceManager implements GatewayTransportListener {
@@ -440,6 +448,12 @@ export class DeviceManager implements GatewayTransportListener {
     await this.submit(device, 'setTemperature', payload);
   }
 
+  async setAcFanSpeed(device: AirConditionerDevice, fanSpeed: string): Promise<void> {
+    const payload: CommandPayload = {};
+    payload['fanSpeed'] = fanSpeed;
+    await this.submit(device, 'setFanSpeed', payload);
+  }
+
   async setAcBrand(device: AirConditionerDevice, brand: string): Promise<void> {
     const payload: CommandPayload = {};
     payload['brand'] = brand;
@@ -477,9 +491,135 @@ export class DeviceManager implements GatewayTransportListener {
     await this.submitRaw('scene-home', 'executeHome', null, {});
   }
 
+  async executeConfiguredScene(actions: SceneDeviceAction[]): Promise<void> {
+    this.sceneResults = [];
+    for (let index = 0; index < actions.length; index++) {
+      const sceneAction = actions[index];
+      if (sceneAction.operation === 'keep') {
+        continue;
+      }
+      const device = this.getDeviceById(sceneAction.deviceId);
+      if (device === null || device.type === DeviceType.ENVIRONMENT) {
+        continue;
+      }
+      const power = sceneAction.operation === 'on';
+      if (device.type === DeviceType.LIGHT) {
+        await this.setLightPower(device as LightDevice, power);
+      } else if (device.type === DeviceType.AIR_CONDITIONER) {
+        await this.setAcPower(device as AirConditionerDevice, power);
+      } else if (device.type === DeviceType.DOOR_LOCK) {
+        if (!power) {
+          await this.setDoorLocked(device as DoorLockDevice, true);
+        }
+      } else {
+        await this.executeGenericSceneOperation(device as GenericDevice, power);
+      }
+    }
+  }
+
+  async applySmartTemplate(templateId: string): Promise<void> {
+    if (templateId === 'away') {
+      await this.executeAwayScene();
+      return;
+    }
+    if (templateId === 'home') {
+      await this.executeHomeScene();
+      return;
+    }
+    if (templateId === 'motionLight') {
+      await this.enableMotionLighting(100, 60);
+      return;
+    }
+    if (templateId === 'cooling') {
+      await this.configureAllAirConditioners(true, ACMode.COOL, 24, ACFanSpeed.AUTO);
+      return;
+    }
+    if (templateId === 'heating') {
+      await this.configureAllAirConditioners(true, ACMode.HEAT, 26, ACFanSpeed.LOW);
+      return;
+    }
+    if (templateId === 'humidityDry') {
+      await this.configureAllAirConditioners(true, ACMode.DRY, 24, ACFanSpeed.MEDIUM);
+    }
+  }
+
+  async applyCustomAutomation(condition: string, action: string): Promise<void> {
+    if (action === 'livingLight') {
+      await this.enableMotionLighting(condition === 'motionDark' ? 100 : 180, 60);
+      return;
+    }
+    if (action === 'dryMode') {
+      await this.configureAllAirConditioners(true, ACMode.DRY, 24, ACFanSpeed.MEDIUM);
+      return;
+    }
+    if (action === 'awayScene') {
+      await this.executeAwayScene();
+    }
+  }
+
   private async connectAndSync(): Promise<void> {
     await this.transport.connect(this);
     await this.refreshAll();
+  }
+
+  private async enableMotionLighting(threshold: number, delaySeconds: number): Promise<void> {
+    const lights = this.getLights();
+    for (let index = 0; index < lights.length; index++) {
+      await this.setLightAutomation(lights[index], true, threshold, delaySeconds);
+    }
+  }
+
+  private async configureAllAirConditioners(
+    power: boolean,
+    mode: string,
+    temperature: number,
+    fanSpeed: string
+  ): Promise<void> {
+    const airConditioners = this.getAirConditioners();
+    for (let index = 0; index < airConditioners.length; index++) {
+      await this.setAcPower(airConditioners[index], power);
+      await this.setAcMode(airConditioners[index], mode);
+      await this.setAcTemperature(airConditioners[index], temperature);
+      await this.setAcFanSpeed(airConditioners[index], fanSpeed);
+    }
+  }
+
+  private async executeGenericSceneOperation(
+    device: GenericDevice,
+    power: boolean
+  ): Promise<void> {
+    let toggle: DeviceControl | null = null;
+    let namedButton: DeviceControl | null = null;
+    let slider: DeviceControl | null = null;
+    const buttonAction = power ? 'open' : 'close';
+    for (let index = 0; index < device.controls.length; index++) {
+      const control = device.controls[index];
+      if (control.kind === DeviceControlKind.TOGGLE && (toggle === null || control.primary)) {
+        toggle = control;
+      } else if (
+        control.kind === DeviceControlKind.BUTTON &&
+        control.action === buttonAction
+      ) {
+        namedButton = control;
+      } else if (control.kind === DeviceControlKind.SLIDER && (slider === null || control.primary)) {
+        slider = control;
+      }
+    }
+    if (toggle !== null) {
+      const payload: CommandPayload = {};
+      payload[toggle.payloadKey] = power;
+      await this.executeDeviceAction(device, toggle.action, payload);
+      return;
+    }
+    if (namedButton !== null) {
+      await this.executeDeviceAction(device, namedButton.action, {});
+      return;
+    }
+    if (slider !== null) {
+      const payload: CommandPayload = {};
+      payload[slider.payloadKey] = power ? slider.maximum : slider.minimum;
+      await this.executeDeviceAction(device, slider.action, payload);
+    }
   }
 
   private async submit(

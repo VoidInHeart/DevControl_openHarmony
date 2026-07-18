@@ -1,4 +1,5 @@
-import { LightDevice } from '../model/DeviceModel';
+import { EnvironmentDevice, LightDevice } from '../model/DeviceModel';
+import { DeviceRegistry } from '../model/DeviceRegistry';
 import { DeviceManager } from '../model/DeviceManager';
 
 @Component
@@ -25,7 +26,9 @@ export struct LightingTab {
 
         ForEach(this.visibleLights(), (device: LightDevice) => {
           this.LightCard(device)
-          this.AutomationCard(device)
+          if (this.deviceId.length > 0) {
+            this.AutomationCard(device)
+          }
         }, (device: LightDevice) => device.id + ':' + device.stateVersion.toString())
       }
       .width('100%')
@@ -52,10 +55,35 @@ export struct LightingTab {
   }
 
   @Builder
+  PendingBadge() {
+    Row() {
+      Text('•')
+        .fontSize(16)
+        .fontColor('#D28A00')
+        .margin({ right: 4 })
+      Text('同步中')
+        .fontSize(11)
+        .fontColor('#8A5A00')
+    }
+    .height(28)
+    .padding({ left: 9, right: 10 })
+    .backgroundColor('#FFF3D6')
+    .borderRadius(14)
+  }
+
+  @Builder
   LightCard(device: LightDevice) {
     Column() {
+      if (this.deviceId.length > 0) {
+        Text('电源与亮度')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+          .width('100%')
+          .margin({ bottom: 14 })
+      }
       Row() {
-        Text(device.state.power ? '○' : '○')
+        Text(device.state.power ? '●' : '○')
           .fontSize(30)
           .fontColor(device.state.power ? '#F2B84B' : '#8AA0B6')
           .width(56)
@@ -74,15 +102,17 @@ export struct LightingTab {
             .fontSize(13)
             .fontColor($r('app.color.text_secondary'))
             .margin({ top: 2 })
+          Text(DeviceRegistry.getRoomLabel(device.roomId) + ' · ' +
+            (device.online ? '在线' : '离线'))
+            .fontSize(11)
+            .fontColor('#8A98A8')
+            .margin({ top: 4 })
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
         .margin({ left: 12 })
         if (this.deviceManager.isDevicePending(device.id)) {
-          Text('处理中')
-            .fontSize(12)
-            .fontColor($r('app.color.status_warning'))
-            .margin({ right: 8 })
+          this.PendingBadge()
         }
         Toggle({ type: ToggleType.Switch, isOn: device.state.power })
           .enabled(this.canControl(device))
@@ -139,11 +169,11 @@ export struct LightingTab {
     Column() {
       Row() {
         Column() {
-          Text('人体与照度自动照明')
+          Text('自动照明规则')
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
-          Text('手动控制后，网关会保留一段优先时间')
+          Text(this.automationRuleText(device))
             .fontSize(12)
             .fontColor($r('app.color.text_secondary'))
             .margin({ top: 4 })
@@ -162,6 +192,13 @@ export struct LightingTab {
           })
       }
       .width('100%')
+
+      Row() {
+        this.RuleStatus('房间状态', this.roomPresenceLabel(device.roomId))
+        this.RuleStatus('当前光照', this.sensorIlluminance(device.roomId))
+      }
+      .width('100%')
+      .margin({ top: 14 })
 
       Row() {
         Text('照度阈值')
@@ -235,6 +272,27 @@ export struct LightingTab {
     .backgroundColor('#F7FBFF')
   }
 
+  @Builder
+  RuleStatus(label: string, value: string) {
+    Column() {
+      Text(value)
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+      Text(label)
+        .fontSize(11)
+        .fontColor('#748294')
+        .margin({ top: 4 })
+    }
+    .layoutWeight(1)
+    .height(58)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor(Color.White)
+    .borderRadius(18)
+    .margin({ right: 8 })
+  }
+
   private canControl(device: LightDevice): boolean {
     return this.deviceManager.isOnline() && device.online &&
       !this.deviceManager.isDevicePending(device.id);
@@ -249,5 +307,54 @@ export struct LightingTab {
       return 0.15;
     }
     return 0.15 + Math.max(0, Math.min(100, brightness)) * 0.0085;
+  }
+
+  private roomSensor(roomId: string): EnvironmentDevice | null {
+    const sensors = this.deviceManager.getEnvironmentDevices();
+    for (let index = 0; index < sensors.length; index++) {
+      if (sensors[index].roomId === roomId) {
+        return sensors[index];
+      }
+    }
+    return null;
+  }
+
+  private sensorPresence(roomId: string): string {
+    const sensor = this.roomSensor(roomId);
+    if (sensor === null) {
+      return '--';
+    }
+    return sensor.state.presence ? '有人' : '无人';
+  }
+
+  private roomPresenceLabel(roomId: string): string {
+    const sensor = this.roomSensor(roomId);
+    if (sensor === null) {
+      return '无传感器';
+    }
+    return sensor.state.presence ? '有人活动' : '无人活动';
+  }
+
+  private sensorIlluminance(roomId: string): string {
+    const sensor = this.roomSensor(roomId);
+    if (sensor === null) {
+      return '--';
+    }
+    return sensor.state.illuminanceLux.toFixed(0) + ' lx';
+  }
+
+  private sensorValidity(roomId: string): string {
+    const sensor = this.roomSensor(roomId);
+    if (sensor === null) {
+      return '--';
+    }
+    return sensor.state.dataValid ? '有效' : '异常';
+  }
+
+  private automationRuleText(device: LightDevice): string {
+    if (this.roomSensor(device.roomId) === null) {
+      return '该房间没有传感器，暂时不能自动判断是否开灯。';
+    }
+    return '有人活动且光线较暗时开灯，无人一段时间后关灯。';
   }
 }

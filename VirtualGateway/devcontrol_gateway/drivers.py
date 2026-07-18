@@ -84,22 +84,37 @@ class LightDriver(DeviceDriver):
     tick_priority = 30
 
     def create_devices(self) -> list[dict[str, Any]]:
-        light = base_device("light-living-01", "客厅主灯", "living", self.device_type)
-        light.update(
-            {
-                "power": False,
-                "brightness": 60,
-                "lastNonZeroBrightness": 60,
-                "automation": {
-                    "enabled": False,
-                    "illuminanceThresholdLux": 100,
-                    "noPresenceDelaySeconds": 60,
-                    "manualOverrideUntil": None,
-                },
-                "_noPresenceSince": None,
-            }
-        )
-        return [light]
+        def create(
+            device_id: str,
+            name: str,
+            room_id: str,
+            brightness: int,
+            automation_enabled: bool,
+        ) -> dict[str, Any]:
+            light = base_device(device_id, name, room_id, self.device_type)
+            light.update(
+                {
+                    "power": False,
+                    "brightness": brightness,
+                    "lastNonZeroBrightness": brightness,
+                    "automation": {
+                        "enabled": automation_enabled,
+                        "illuminanceThresholdLux": 100,
+                        "noPresenceDelaySeconds": 60,
+                        "manualOverrideUntil": None,
+                    },
+                    "_noPresenceSince": None,
+                }
+            )
+            return light
+
+        return [
+            create("light-living-01", "客厅主灯", "living", 70, True),
+            create("light-living-02", "客厅氛围灯", "living", 45, True),
+            create("light-master-01", "主卧顶灯", "masterBedroom", 60, True),
+            create("light-bedroom-01", "次卧阅读灯", "bedroom", 50, False),
+            create("light-bathroom-01", "浴室镜前灯", "bathroom", 80, True),
+        ]
 
     def execute(
         self,
@@ -203,20 +218,49 @@ class EnvironmentDriver(DeviceDriver):
     tick_priority = 10
 
     def create_devices(self) -> list[dict[str, Any]]:
-        environment = base_device(
-            "env-living-01", "客厅环境传感器", "living", self.device_type
-        )
-        environment.update(
-            {
-                "temperatureCelsius": 24.0,
-                "humidityPercent": 55.0,
-                "illuminanceLux": 80.0,
-                "presence": True,
-                "dataValid": True,
-                "_manualInjectionUntil": 0.0,
-            }
-        )
-        return [environment]
+        def create(
+            device_id: str,
+            name: str,
+            room_id: str,
+            temperature: float,
+            humidity: float,
+            illuminance: float,
+            presence: bool,
+        ) -> dict[str, Any]:
+            environment = base_device(device_id, name, room_id, self.device_type)
+            environment.update(
+                {
+                    "temperatureCelsius": temperature,
+                    "humidityPercent": humidity,
+                    "illuminanceLux": illuminance,
+                    "presence": presence,
+                    "dataValid": True,
+                    "_manualInjectionUntil": 0.0,
+                }
+            )
+            return environment
+
+        return [
+            create("env-living-01", "客厅环境传感器", "living", 24.0, 55.0, 80.0, True),
+            create(
+                "env-master-01",
+                "主卧环境传感器",
+                "masterBedroom",
+                23.4,
+                52.0,
+                130.0,
+                False,
+            ),
+            create(
+                "env-bathroom-01",
+                "浴室湿度传感器",
+                "bathroom",
+                25.2,
+                68.0,
+                160.0,
+                False,
+            ),
+        ]
 
     def tick(self, device: dict[str, Any], context: DriverContext) -> bool:
         now = time.time()
@@ -280,20 +324,31 @@ class AirConditionerDriver(DeviceDriver):
     tick_priority = 20
 
     def create_devices(self) -> list[dict[str, Any]]:
-        air_conditioner = base_device(
-            "ac-living-01", "客厅空调", "living", self.device_type
-        )
-        air_conditioner.update(
-            {
-                "brand": "haierSim",
-                "power": False,
-                "mode": "auto",
-                "targetTemperatureCelsius": 24,
-                "running": False,
-                "lastAdapterFrame": "",
-            }
-        )
-        return [air_conditioner]
+        def create(
+            device_id: str,
+            name: str,
+            room_id: str,
+            brand: str,
+            target_temperature: int,
+        ) -> dict[str, Any]:
+            air_conditioner = base_device(device_id, name, room_id, self.device_type)
+            air_conditioner.update(
+                {
+                    "brand": brand,
+                    "power": False,
+                    "mode": "auto",
+                    "targetTemperatureCelsius": target_temperature,
+                    "fanSpeed": "auto",
+                    "running": False,
+                    "lastAdapterFrame": "",
+                }
+            )
+            return air_conditioner
+
+        return [
+            create("ac-living-01", "客厅空调", "living", "haierSim", 24),
+            create("ac-master-01", "主卧空调", "masterBedroom", "greeSim", 26),
+        ]
 
     def execute(
         self,
@@ -321,12 +376,29 @@ class AirConditionerDriver(DeviceDriver):
                 raise GatewayError(INVALID_COMMAND, "目标温度必须为整数")
             command = NormalizedAcCommand(action=action, temperature=temperature)
             device["targetTemperatureCelsius"] = temperature
+        elif action == "setFanSpeed":
+            fan_speed = payload.get("fanSpeed")
+            if not isinstance(fan_speed, str) or fan_speed not in {
+                "auto",
+                "low",
+                "medium",
+                "high",
+            }:
+                raise GatewayError(INVALID_COMMAND, "空调风速参数无效")
+            command = NormalizedAcCommand(action=action, fan_speed=fan_speed)
+            device["fanSpeed"] = fan_speed
         elif action == "setBrand":
             brand = payload.get("brand")
             if not isinstance(brand, str) or brand not in ADAPTERS:
                 raise GatewayError(INVALID_COMMAND, "模拟品牌不受支持")
             device["brand"] = brand
-            command = NormalizedAcCommand(action="setPower", power=device["power"])
+            command = NormalizedAcCommand(
+                action="setPower",
+                power=device["power"],
+                mode=device["mode"],
+                temperature=device["targetTemperatureCelsius"],
+                fan_speed=device["fanSpeed"],
+            )
         else:
             raise GatewayError(INVALID_COMMAND, "空调动作不受支持")
         adapter = get_adapter(device["brand"])
