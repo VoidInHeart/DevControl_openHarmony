@@ -16,6 +16,7 @@ export struct ControlCenterTab {
   @State selectedRoom: string = 'all';
   @State showMetricSheet: boolean = false;
   @State activeMetric: string = '';
+  private roomSegmentsScroller: Scroller = new Scroller();
 
   build() {
     Column() {
@@ -92,10 +93,12 @@ export struct ControlCenterTab {
       }
         .width(46)
         .height(46)
+        .id('home-reset-button')
         .backgroundColor('#E4F0FF')
         .borderRadius(23)
         .onClick(() => {
           this.selectedRoom = 'all';
+          this.roomSegmentsScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
         })
     }
     .width('100%')
@@ -517,7 +520,7 @@ export struct ControlCenterTab {
 
   @Builder
   RoomSegments() {
-    Scroll() {
+    Scroll(this.roomSegmentsScroller) {
       Row() {
         this.RoomButton('all', '全屋')
         ForEach(this.displayRoomIds(), (roomId: string) => {
