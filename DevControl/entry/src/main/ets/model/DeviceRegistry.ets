@@ -162,7 +162,7 @@ export class DeviceRegistry {
       return '客厅';
     }
     if (roomId === 'bedroom') {
-      return '卧室';
+      return '次卧';
     }
     if (roomId === 'masterBedroom') {
       return '主卧';

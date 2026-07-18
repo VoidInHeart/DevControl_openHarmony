@@ -14,17 +14,21 @@ import { DeviceManager } from '../model/DeviceManager';
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
   @State selectedRoom: string = 'all';
+  @State showMetricSheet: boolean = false;
+  @State activeMetric: string = '';
 
   build() {
     Scroll() {
       Column() {
-        this.HomeHeader()
-        this.RoomSegments()
-        this.StatusStrip()
-        if (this.selectedRoom === 'all') {
-          this.FeatureSection()
+        if (this.deviceManager.deviceStateRevision >= 0) {
+          this.HomeHeader()
+          this.RoomSegments()
+          this.StatusStrip()
+          if (this.selectedRoom === 'all') {
+            this.FeatureSection()
+          }
+          this.DeviceSection()
         }
-        this.DeviceSection()
       }
       .width('100%')
       .padding({ left: 18, right: 18, top: 42, bottom: 18 })
@@ -33,6 +37,15 @@ export struct ControlCenterTab {
     .layoutWeight(1)
     .backgroundColor('#DCEAF2')
     .scrollBar(BarState.Off)
+    .bindSheet(this.showMetricSheet, this.MetricSheet(), {
+      height: '70%',
+      dragBar: true,
+      showClose: false,
+      maskColor: '#33000000',
+      onDisappear: () => {
+        this.showMetricSheet = false;
+      }
+    })
   }
 
   @Builder
@@ -50,14 +63,23 @@ export struct ControlCenterTab {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
-      Text('⌂')
-        .fontSize(28)
-        .fontColor('#1769C2')
+      Stack({ alignContent: Alignment.Center }) {
+        Text('⌂')
+          .fontSize(30)
+          .fontColor('#1769C2')
+          .width('100%')
+          .height('100%')
+          .lineHeight(46)
+          .textAlign(TextAlign.Center)
+          .translate({ y: -2 })
+      }
         .width(46)
         .height(46)
-        .textAlign(TextAlign.Center)
         .backgroundColor('#E4F0FF')
         .borderRadius(23)
+        .onClick(() => {
+          this.selectedRoom = 'all';
+        })
     }
     .width('100%')
     .margin({ bottom: 10 })
@@ -66,10 +88,14 @@ export struct ControlCenterTab {
   @Builder
   StatusStrip() {
     Row() {
-      this.StatusPill('室温', this.averageTemperature(), '│', '#EAF4FF')
-      this.StatusPill('湿度', this.averageHumidity(), '●', '#EEF9F4')
-      this.StatusPill('亮灯', this.lightsOnCount().toString(), '○', '#FFF7E8')
-      this.StatusPill('在线', this.deviceManager.getOnlineCount().toString(), '●', '#F0EEFF')
+      if (this.hasEnvironmentSensor()) {
+        this.StatusPill('室温', this.averageTemperature(), '│', '#EAF4FF', 'temperature')
+        this.StatusPill('湿度', this.averageHumidity(), '●', '#EEF9F4', 'humidity')
+      }
+      if (this.selectedRoom === 'all') {
+        this.StatusPill('亮灯', this.lightsOnCount().toString(), '○', '#FFF7E8', 'lights')
+      }
+      this.StatusPill('在线', this.onlineDeviceCount().toString(), '●', '#F0EEFF', 'online')
     }
     .width('100%')
     .justifyContent(FlexAlign.SpaceBetween)
@@ -77,7 +103,7 @@ export struct ControlCenterTab {
   }
 
   @Builder
-  StatusPill(label: string, value: string, icon: string, color: string) {
+  StatusPill(label: string, value: string, icon: string, color: string, metric: string) {
     Column() {
       Text(icon)
         .fontSize(20)
@@ -92,12 +118,307 @@ export struct ControlCenterTab {
         .fontColor('#748294')
         .margin({ top: 3 })
     }
-    .width('23%')
+    .width(this.statusPillWidth())
     .height(86)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .backgroundColor(color)
     .borderRadius(20)
+    .onClick(() => {
+      this.openMetricSheet(metric);
+    })
+  }
+
+  @Builder
+  MetricSheet() {
+    Column() {
+      Row() {
+        Column() {
+          Text(this.metricSheetTitle())
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text(this.metricSheetSubtitle())
+            .fontSize(13)
+            .fontColor('#748294')
+            .margin({ top: 4 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text('×')
+          .fontSize(28)
+          .fontColor('#748294')
+          .width(44)
+          .height(44)
+          .textAlign(TextAlign.Center)
+          .onClick(() => {
+            this.showMetricSheet = false;
+          })
+      }
+      .width('100%')
+      .padding({ left: 20, right: 12, top: 14, bottom: 12 })
+
+      Scroll() {
+        Column() {
+          if (this.activeMetric === 'temperature') {
+            this.TemperatureMetricContent()
+          } else if (this.activeMetric === 'humidity') {
+            this.HumidityMetricContent()
+          } else if (this.activeMetric === 'lights') {
+            this.LightsMetricContent()
+          } else {
+            this.OnlineMetricContent()
+          }
+        }
+        .width('100%')
+        .padding({ left: 20, right: 20, bottom: 28 })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Auto)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.White)
+  }
+
+  @Builder
+  LightsMetricContent() {
+    Column() {
+      Text('正在开启的灯')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+        .width('100%')
+        .margin({ bottom: 12 })
+      if (this.activeLights().length === 0) {
+        this.SheetEmptyState('当前没有开启的灯')
+      } else {
+        ForEach(this.activeLights(), (device: LightDevice) => {
+          Row() {
+            Text('○')
+              .fontSize(28)
+              .fontColor('#A46A00')
+              .width(48)
+              .height(48)
+              .textAlign(TextAlign.Center)
+              .backgroundColor('#FFF4D8')
+              .borderRadius(16)
+            Column() {
+              Text(device.name)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text('亮度 ' + device.state.brightness.toFixed(0) + '%')
+                .fontSize(12)
+                .fontColor('#748294')
+                .margin({ top: 4 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            Toggle({ type: ToggleType.Switch, isOn: device.state.power })
+              .enabled(this.canControlDevice(device))
+              .opacity(this.canControlDevice(device) ? 1 : 0.45)
+              .selectedColor('#1769C2')
+              .onChange((isOn: boolean) => {
+                this.deviceManager.setLightPower(device, isOn);
+              })
+          }
+          .width('100%')
+          .padding(14)
+          .borderRadius(20)
+          .backgroundColor('#F7FBFF')
+          .margin({ bottom: 10 })
+          .alignItems(VerticalAlign.Center)
+        }, (device: LightDevice) => device.id + ':' + device.stateVersion.toString())
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  TemperatureMetricContent() {
+    Column() {
+      Text('已接入空调')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+        .width('100%')
+        .margin({ bottom: 12 })
+      if (this.scopedAirConditioners().length === 0) {
+        this.SheetEmptyState('当前范围暂未接入空调')
+      } else {
+        ForEach(this.scopedAirConditioners(), (device: AirConditionerDevice) => {
+          Column() {
+            Row() {
+              Text('❄')
+                .fontSize(24)
+                .fontColor('#1769C2')
+                .width(48)
+                .height(48)
+                .textAlign(TextAlign.Center)
+                .backgroundColor('#EAF4FF')
+                .borderRadius(16)
+              Column() {
+                Text(device.name)
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor('#14263A')
+                Text(device.state.power ? '已开启' : '已关闭')
+                  .fontSize(12)
+                  .fontColor('#748294')
+                  .margin({ top: 4 })
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+              .margin({ left: 12 })
+              Toggle({ type: ToggleType.Switch, isOn: device.state.power })
+                .enabled(this.canControlDevice(device))
+                .opacity(this.canControlDevice(device) ? 1 : 0.45)
+                .selectedColor('#1769C2')
+                .onChange((isOn: boolean) => {
+                  this.deviceManager.setAcPower(device, isOn);
+                })
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+
+            Row() {
+              Text('目标温度')
+                .fontSize(13)
+                .fontColor('#748294')
+              Blank()
+              Text(device.state.targetTemperatureCelsius.toFixed(0) + '°C')
+                .fontSize(18)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#1769C2')
+            }
+            .width('100%')
+            .margin({ top: 18 })
+            Slider({
+              value: device.state.targetTemperatureCelsius,
+              min: 16,
+              max: 30,
+              step: 1,
+              style: SliderStyle.OutSet
+            })
+              .width('100%')
+              .enabled(this.canControlDevice(device))
+              .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+              .selectedColor('#1769C2')
+              .onChange((value: number, mode: SliderChangeMode) => {
+                if (this.shouldCommitSlider(mode)) {
+                  this.deviceManager.setAcTemperature(device, value);
+                }
+              })
+          }
+          .width('100%')
+          .padding(16)
+          .borderRadius(20)
+          .backgroundColor('#F7FBFF')
+          .margin({ bottom: 10 })
+        }, (device: AirConditionerDevice) => device.id + ':' + device.stateVersion.toString())
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  HumidityMetricContent() {
+    Column() {
+      Text('当前湿度 ' + this.averageHumidity())
+        .fontSize(28)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+        .width('100%')
+      ForEach(this.scopedEnvironmentDevices(), (device: EnvironmentDevice) => {
+        Text(device.name + ' · ' + device.state.humidityPercent.toFixed(0) + '%')
+          .fontSize(13)
+          .fontColor('#748294')
+          .width('100%')
+          .margin({ top: 8 })
+      }, (device: EnvironmentDevice) => device.id + ':' + device.stateVersion.toString())
+      Column() {
+        Text('加湿器控制（预留）')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+        Text('接入加湿器模块后，这里将自动显示开关、目标湿度和模式控制。')
+          .fontSize(13)
+          .fontColor('#748294')
+          .width('100%')
+          .margin({ top: 6 })
+      }
+      .width('100%')
+      .padding(18)
+      .borderRadius(20)
+      .backgroundColor('#EEF9F4')
+      .margin({ top: 22 })
+    }
+    .width('100%')
+  }
+
+  @Builder
+  OnlineMetricContent() {
+    Column() {
+      Text(this.onlineDeviceCount().toString() + ' 台设备在线')
+        .fontSize(28)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+        .width('100%')
+        .margin({ bottom: 16 })
+      if (this.onlineDevices().length === 0) {
+        this.SheetEmptyState('当前范围没有在线设备')
+      } else {
+        ForEach(this.onlineDevices(), (device: DeviceInfo) => {
+          Row() {
+            Text(this.deviceIcon(device))
+              .fontSize(22)
+              .width(46)
+              .height(46)
+              .textAlign(TextAlign.Center)
+              .backgroundColor(this.deviceTint(device))
+              .borderRadius(16)
+            Column() {
+              Text(device.name)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text(this.deviceSummary(device))
+                .fontSize(12)
+                .fontColor('#748294')
+                .margin({ top: 4 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            Text('在线')
+              .fontSize(12)
+              .fontColor('#0F8F66')
+          }
+          .width('100%')
+          .padding(14)
+          .borderRadius(20)
+          .backgroundColor('#F7FBFF')
+          .margin({ bottom: 10 })
+          .alignItems(VerticalAlign.Center)
+        }, (device: DeviceInfo) => device.id + ':' + device.stateVersion.toString())
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  SheetEmptyState(message: string) {
+    Text(message)
+      .fontSize(14)
+      .fontColor('#748294')
+      .width('100%')
+      .padding(20)
+      .textAlign(TextAlign.Center)
+      .borderRadius(20)
+      .backgroundColor('#F7FBFF')
   }
 
   @Builder
@@ -332,10 +653,104 @@ export struct ControlCenterTab {
   }
 
   private visibleDevices(): DeviceInfo[] {
+    return this.scopedDevices();
+  }
+
+  private scopedDevices(): DeviceInfo[] {
     if (this.selectedRoom === 'all') {
       return this.deviceManager.devices;
     }
     return this.deviceManager.getDevicesByRoom(this.selectedRoom);
+  }
+
+  private scopedEnvironmentDevices(): EnvironmentDevice[] {
+    const result: EnvironmentDevice[] = [];
+    const devices = this.scopedDevices();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].type === DeviceType.ENVIRONMENT) {
+        result.push(devices[index] as EnvironmentDevice);
+      }
+    }
+    return result;
+  }
+
+  private scopedAirConditioners(): AirConditionerDevice[] {
+    const result: AirConditionerDevice[] = [];
+    const devices = this.scopedDevices();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].type === DeviceType.AIR_CONDITIONER) {
+        result.push(devices[index] as AirConditionerDevice);
+      }
+    }
+    return result;
+  }
+
+  private activeLights(): LightDevice[] {
+    const result: LightDevice[] = [];
+    const lights = this.deviceManager.getLights();
+    for (let index = 0; index < lights.length; index++) {
+      if (lights[index].state.power) {
+        result.push(lights[index]);
+      }
+    }
+    return result;
+  }
+
+  private onlineDevices(): DeviceInfo[] {
+    const result: DeviceInfo[] = [];
+    const devices = this.scopedDevices();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].online) {
+        result.push(devices[index]);
+      }
+    }
+    return result;
+  }
+
+  private onlineDeviceCount(): number {
+    return this.onlineDevices().length;
+  }
+
+  private hasEnvironmentSensor(): boolean {
+    return this.scopedEnvironmentDevices().length > 0;
+  }
+
+  private statusPillWidth(): string {
+    if (this.selectedRoom === 'all') {
+      return this.hasEnvironmentSensor() ? '23%' : '48.5%';
+    }
+    return this.hasEnvironmentSensor() ? '31.5%' : '100%';
+  }
+
+  private openMetricSheet(metric: string): void {
+    this.activeMetric = metric;
+    this.showMetricSheet = true;
+  }
+
+  private metricSheetTitle(): string {
+    if (this.activeMetric === 'temperature') {
+      return '室温控制';
+    }
+    if (this.activeMetric === 'humidity') {
+      return '湿度管理';
+    }
+    if (this.activeMetric === 'lights') {
+      return '亮灯管理';
+    }
+    return '在线设备';
+  }
+
+  private metricSheetSubtitle(): string {
+    return this.selectedRoom === 'all' ? '全屋范围' : this.roomLabel(this.selectedRoom);
+  }
+
+  private canControlDevice(device: DeviceInfo): boolean {
+    return this.deviceManager.isOnline() && device.online &&
+      !this.deviceManager.isDevicePending(device.id);
+  }
+
+  private shouldCommitSlider(mode: SliderChangeMode): boolean {
+    return mode === SliderChangeMode.End || mode === SliderChangeMode.Click;
   }
 
   private availableRoomIds(): string[] {
@@ -350,7 +765,7 @@ export struct ControlCenterTab {
   }
 
   private displayRoomIds(): string[] {
-    return ['living', 'bedroom', 'masterBedroom', 'bathroom'];
+    return ['living', 'masterBedroom', 'bedroom', 'bathroom'];
   }
 
   private roomLabel(roomId: string): string {
@@ -358,7 +773,7 @@ export struct ControlCenterTab {
       return '客厅';
     }
     if (roomId === 'bedroom') {
-      return '卧室';
+      return '次卧';
     }
     if (roomId === 'masterBedroom') {
       return '主卧';
@@ -492,7 +907,7 @@ export struct ControlCenterTab {
   }
 
   private averageTemperature(): string {
-    const sensors = this.deviceManager.getEnvironmentDevices();
+    const sensors = this.scopedEnvironmentDevices();
     if (sensors.length === 0) {
       return '--';
     }
@@ -504,7 +919,7 @@ export struct ControlCenterTab {
   }
 
   private averageHumidity(): string {
-    const sensors = this.deviceManager.getEnvironmentDevices();
+    const sensors = this.scopedEnvironmentDevices();
     if (sensors.length === 0) {
       return '--';
     }

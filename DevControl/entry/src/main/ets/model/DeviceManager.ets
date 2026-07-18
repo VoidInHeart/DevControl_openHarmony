@@ -27,6 +27,7 @@ import { DeviceRegistry } from './DeviceRegistry';
 @Observed
 export class DeviceManager implements GatewayTransportListener {
   devices: DeviceInfo[] = [];
+  deviceStateRevision: number = 0;
   accessLogs: AccessLogEntry[] = [];
   alerts: AlertEntry[] = [];
   environmentHistory: EnvironmentHistoryPoint[] = [];
@@ -78,6 +79,7 @@ export class DeviceManager implements GatewayTransportListener {
       const cached = await this.snapshotStore.restore();
       if (cached !== null) {
         this.devices = cached.devices;
+        this.bumpDeviceStateRevision();
         this.lastSyncAt = cached.lastSyncAt;
       }
       const restored = await this.sessionStore.restore();
@@ -177,6 +179,7 @@ export class DeviceManager implements GatewayTransportListener {
     }
     this.session = null;
     this.devices = [];
+    this.bumpDeviceStateRevision();
     this.accessLogs = [];
     this.alerts = [];
     this.environmentHistory = [];
@@ -248,6 +251,7 @@ export class DeviceManager implements GatewayTransportListener {
     try {
       const snapshot = await this.transport.fetchDeviceSnapshot();
       this.devices = snapshot;
+      this.bumpDeviceStateRevision();
       this.lastSyncAt = Date.now();
       if (this.snapshotStore !== null) {
         try {
@@ -537,6 +541,7 @@ export class DeviceManager implements GatewayTransportListener {
       result.push(incoming);
     }
     this.devices = result;
+    this.bumpDeviceStateRevision();
     this.lastSyncAt = Date.now();
   }
 
@@ -573,7 +578,7 @@ export class DeviceManager implements GatewayTransportListener {
       this.lastErrorCode = '';
     }
     this.accessLogs = [log, ...this.accessLogs].slice(0, 50);
-    if (this.isSceneCommand(deviceId) && success) {
+    if (success) {
       this.refreshAll().catch((error: Error) => {
         this.setErrorFromException(error);
       });
@@ -642,6 +647,10 @@ export class DeviceManager implements GatewayTransportListener {
     this.pendingByMessage.clear();
     this.actionByMessage.clear();
     this.pendingDeviceIds = [];
+  }
+
+  private bumpDeviceStateRevision(): void {
+    this.deviceStateRevision += 1;
   }
 
   private invalidateSession(message: string): void {
