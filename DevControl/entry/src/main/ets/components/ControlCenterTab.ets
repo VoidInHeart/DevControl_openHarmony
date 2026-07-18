@@ -93,7 +93,7 @@ export struct ControlCenterTab {
         .width('100%')
         .margin({ bottom: 12 })
       Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
-        ForEach(DeviceRegistry.getHomeFeatures(), (feature: DeviceFeature) => {
+        ForEach(DeviceRegistry.getHomeFeatures(this.deviceManager.devices), (feature: DeviceFeature) => {
           this.FeatureCard(feature)
         }, (feature: DeviceFeature) => feature.id)
       }
@@ -158,7 +158,10 @@ export struct ControlCenterTab {
     if (feature.id === 'locks') {
       return devices.length.toString() + ' 把门锁 · 全屋安全入口';
     }
-    return devices.length.toString() + ' 台设备 · 温湿度与空调';
+    if (feature.id === 'environment') {
+      return devices.length.toString() + ' 台设备 · 温湿度与空调';
+    }
+    return devices.length.toString() + ' 台设备 · ' + feature.title;
   }
 
   private headerSubtitle(): string {

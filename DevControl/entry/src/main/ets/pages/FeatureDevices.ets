@@ -2,6 +2,7 @@ import { router } from '@kit.ArkUI';
 import { DoorLockTab } from '../components/DoorLockTab';
 import { LightingTab } from '../components/LightingTab';
 import { TemperatureTab } from '../components/TemperatureTab';
+import { GenericFeatureTab } from '../components/GenericFeatureTab';
 import { DeviceApplication } from '../model/DeviceApplication';
 import { DeviceManager } from '../model/DeviceManager';
 import { DeviceRegistry } from '../model/DeviceRegistry';
@@ -30,7 +31,7 @@ struct FeatureDevices {
       } else if (this.featureId === 'locks') {
         DoorLockTab()
       } else {
-        this.EmptyState()
+        GenericFeatureTab({ featureId: this.featureId })
       }
     }
     .width('100%')
@@ -85,12 +86,12 @@ struct FeatureDevices {
   }
 
   private featureTitle(): string {
-    const feature = DeviceRegistry.getFeature(this.featureId);
+    const feature = DeviceRegistry.getFeature(this.featureId, this.deviceManager.devices);
     return feature === null ? '功能设备' : feature.title;
   }
 
   private featureIcon(): string {
-    const feature = DeviceRegistry.getFeature(this.featureId);
+    const feature = DeviceRegistry.getFeature(this.featureId, this.deviceManager.devices);
     return feature === null ? '⌂' : feature.icon;
   }
 }

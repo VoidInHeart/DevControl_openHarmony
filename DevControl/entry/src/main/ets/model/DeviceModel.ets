@@ -1,3 +1,8 @@
+import {
+  GenericDevice,
+  parseGenericDevice,
+  serializeGenericDevice
+} from './GenericDeviceModel';
 export class DeviceType {
   static readonly LIGHT: string = 'light';
   static readonly ENVIRONMENT: string = 'environment';
@@ -103,7 +108,8 @@ export type DeviceInfo =
   LightDevice |
   EnvironmentDevice |
   AirConditionerDevice |
-  DoorLockDevice;
+  DoorLockDevice |
+  GenericDevice;
 
 export class AccessLogEntry {
   time: string = '';
@@ -146,17 +152,7 @@ export class GatewaySession {
   expiresAt: number = 0;
 }
 
-export class CommandPayload {
-  power?: boolean;
-  brightness?: number;
-  enabled?: boolean;
-  illuminanceThresholdLux?: number;
-  noPresenceDelaySeconds?: number;
-  mode?: string;
-  temperatureCelsius?: number;
-  brand?: string;
-  delaySeconds?: number;
-}
+export type CommandPayload = Record<string, Object>;
 
 function requireString(raw: Record<string, Object>, key: string): string {
   const value = raw[key];
@@ -314,7 +310,7 @@ export function parseDevice(raw: Record<string, Object>): DeviceInfo {
     device.state.autoLockAt = optionalNullableInteger(raw, 'autoLockAt');
     return device;
   }
-  throw new Error('Unsupported device type: ' + type);
+  return parseGenericDevice(raw);
 }
 
 export function parseDevices(value: Object): DeviceInfo[] {
@@ -328,12 +324,36 @@ export function parseDevices(value: Object): DeviceInfo[] {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) {
       throw new Error('Device snapshot contains a non-object entry');
     }
-    result.push(parseDevice(item as Record<string, Object>));
+    const raw = item as Record<string, Object>;
+    try {
+      result.push(parseDevice(raw));
+    } catch (error) {
+      const deviceType = raw['type'];
+      if (
+        deviceType === DeviceType.LIGHT ||
+        deviceType === DeviceType.ENVIRONMENT ||
+        deviceType === DeviceType.AIR_CONDITIONER ||
+        deviceType === DeviceType.DOOR_LOCK
+      ) {
+        const message = error instanceof Error ?
+          error.message :
+          'Known device parsing failed';
+        throw new Error(message);
+      }
+    }
   }
   return result;
 }
 
 export function serializeDevice(device: DeviceInfo): Record<string, Object> {
+  if (
+    device.type !== DeviceType.LIGHT &&
+    device.type !== DeviceType.ENVIRONMENT &&
+    device.type !== DeviceType.AIR_CONDITIONER &&
+    device.type !== DeviceType.DOOR_LOCK
+  ) {
+    return serializeGenericDevice(device as GenericDevice);
+  }
   const raw: Record<string, Object> = {
     'id': device.id,
     'name': device.name,

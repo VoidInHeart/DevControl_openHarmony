@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .config import GatewayConfig
-from .devices import DeviceRegistry
+from .registry import DeviceRegistry
 from .errors import (
     INTERNAL_ERROR,
     REPLAY_DETECTED,

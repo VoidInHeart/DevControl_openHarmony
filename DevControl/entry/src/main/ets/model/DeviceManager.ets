@@ -394,14 +394,14 @@ export class DeviceManager implements GatewayTransportListener {
   }
 
   async setLightPower(device: LightDevice, power: boolean): Promise<void> {
-    const payload = new CommandPayload();
-    payload.power = power;
+    const payload: CommandPayload = {};
+    payload['power'] = power;
     await this.submit(device, 'setPower', payload);
   }
 
   async setLightBrightness(device: LightDevice, brightness: number): Promise<void> {
-    const payload = new CommandPayload();
-    payload.brightness = Math.round(brightness);
+    const payload: CommandPayload = {};
+    payload['brightness'] = Math.round(brightness);
     await this.submit(device, 'setBrightness', payload);
   }
 
@@ -411,39 +411,39 @@ export class DeviceManager implements GatewayTransportListener {
     threshold: number,
     delaySeconds: number
   ): Promise<void> {
-    const payload = new CommandPayload();
-    payload.enabled = enabled;
-    payload.illuminanceThresholdLux = Math.round(threshold);
-    payload.noPresenceDelaySeconds = Math.round(delaySeconds);
+    const payload: CommandPayload = {};
+    payload['enabled'] = enabled;
+    payload['illuminanceThresholdLux'] = Math.round(threshold);
+    payload['noPresenceDelaySeconds'] = Math.round(delaySeconds);
     await this.submit(device, 'setAutomationConfig', payload);
   }
 
   async setAcPower(device: AirConditionerDevice, power: boolean): Promise<void> {
-    const payload = new CommandPayload();
-    payload.power = power;
+    const payload: CommandPayload = {};
+    payload['power'] = power;
     await this.submit(device, 'setPower', payload);
   }
 
   async setAcMode(device: AirConditionerDevice, mode: string): Promise<void> {
-    const payload = new CommandPayload();
-    payload.mode = mode;
+    const payload: CommandPayload = {};
+    payload['mode'] = mode;
     await this.submit(device, 'setMode', payload);
   }
 
   async setAcTemperature(device: AirConditionerDevice, temperature: number): Promise<void> {
-    const payload = new CommandPayload();
-    payload.temperatureCelsius = Math.round(temperature);
+    const payload: CommandPayload = {};
+    payload['temperatureCelsius'] = Math.round(temperature);
     await this.submit(device, 'setTemperature', payload);
   }
 
   async setAcBrand(device: AirConditionerDevice, brand: string): Promise<void> {
-    const payload = new CommandPayload();
-    payload.brand = brand;
+    const payload: CommandPayload = {};
+    payload['brand'] = brand;
     await this.submit(device, 'setBrand', payload);
   }
 
   async setDoorLocked(device: DoorLockDevice, locked: boolean): Promise<void> {
-    await this.submit(device, locked ? 'lock' : 'unlock', new CommandPayload());
+    await this.submit(device, locked ? 'lock' : 'unlock', {});
   }
 
   async setDoorAutoLock(
@@ -451,18 +451,26 @@ export class DeviceManager implements GatewayTransportListener {
     enabled: boolean,
     delaySeconds: number
   ): Promise<void> {
-    const payload = new CommandPayload();
-    payload.enabled = enabled;
-    payload.delaySeconds = Math.round(delaySeconds);
+    const payload: CommandPayload = {};
+    payload['enabled'] = enabled;
+    payload['delaySeconds'] = Math.round(delaySeconds);
     await this.submit(device, 'setAutoLockConfig', payload);
   }
 
+  async executeDeviceAction(
+    device: DeviceInfo,
+    action: string,
+    payload: CommandPayload
+  ): Promise<void> {
+    await this.submit(device, action, payload);
+  }
+
   async executeAwayScene(): Promise<void> {
-    await this.submitRaw('scene-away', 'executeAway', null, new CommandPayload());
+    await this.submitRaw('scene-away', 'executeAway', null, {});
   }
 
   async executeHomeScene(): Promise<void> {
-    await this.submitRaw('scene-home', 'executeHome', null, new CommandPayload());
+    await this.submitRaw('scene-home', 'executeHome', null, {});
   }
 
   private async connectAndSync(): Promise<void> {
@@ -475,7 +483,7 @@ export class DeviceManager implements GatewayTransportListener {
     action: string,
     payload: CommandPayload
   ): Promise<void> {
-    if (!DeviceRegistry.supportsAction(device.type, action)) {
+    if (!DeviceRegistry.supportsDeviceAction(device, action)) {
       this.setError('INVALID_COMMAND', '该设备不支持此控制操作');
       return;
     }

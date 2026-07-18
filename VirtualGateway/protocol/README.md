@@ -1,6 +1,6 @@
 # DevControl Protocol 1.0
 
-`protocol-v1.schema.json` 是 APP 与网关共享的协议契约，覆盖四类设备、配对、加密命令、命令结果、状态事件、报警、心跳和设备快照。
+`protocol-v1.schema.json` 是 APP 与网关共享的协议契约，覆盖四类专用设备、能力描述式通用设备、配对、加密命令、命令结果、状态事件、报警、心跳和设备快照。
 
 ## 传输
 
@@ -44,6 +44,18 @@ protocolVersion,messageId,deviceId,timestamp,type,action,expectedStateVersion
 - HTTPS 全量快照替换整个本地缓存。
 - APP 发送命令后只显示处理中，不乐观改写设备状态。
 - 网关重启后内存会话失效，客户端必须重新配对。
+
+## 能力描述式通用设备
+
+协议 1.0 保留灯光、环境、空调和门锁的原有字段，同时允许其他设备使用通用结构：
+
+- `category` 提供功能分组、标题、图标和是否仅在全屋展示；
+- `state` 只允许最多 32 个字符串、数字、布尔或空值字段；
+- `controls` 最多 32 项，支持 `button`、`toggle`、`slider` 和 `enum`；
+- 控件动作、状态键和载荷键必须使用受限标识符，滑块和枚举还必须声明合法范围或选项；
+- APP 只按通过校验的描述生成控制入口，网关驱动仍对每条命令执行最终参数校验。
+
+默认通用设备为 `curtain-living-01`。其状态包含当前位置、目标位置和运动方向，支持 `open`、`close`、`stop`、`setPosition`。
 
 ## 标准错误码
 

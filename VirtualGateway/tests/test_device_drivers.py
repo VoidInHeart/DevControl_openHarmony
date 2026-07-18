@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from devcontrol_gateway.drivers import DeviceDriver, DriverContext, base_device
+from devcontrol_gateway.errors import DEVICE_OFFLINE, INVALID_COMMAND, GatewayError
+from devcontrol_gateway.registry import DeviceRegistry
+from devcontrol_gateway.storage import GatewayStorage
+
+
+class FakeSwitchDriver(DeviceDriver):
+    device_type = "fakeSwitch"
+
+    def create_devices(self) -> list[dict[str, object]]:
+        device = base_device(
+            "fake-switch-01", "测试开关", "test-room", self.device_type
+        )
+        device["power"] = False
+        return [device]
+
+    def execute(
+        self,
+        device: dict[str, object],
+        action: str,
+        payload: dict[str, object],
+        context: DriverContext,
+    ) -> None:
+        if action != "setPower" or not isinstance(payload.get("power"), bool):
+            raise GatewayError(INVALID_COMMAND, "命令参数无效")
+        device["power"] = payload["power"]
+
+
+class DuplicateTypeDriver(FakeSwitchDriver):
+    def create_devices(self) -> list[dict[str, object]]:
+        return [
+            base_device("another-fake-01", "重复类型", "test-room", self.device_type)
+        ]
+
+
+class DuplicateIdDriver(FakeSwitchDriver):
+    device_type = "otherSwitch"
+
+    def create_devices(self) -> list[dict[str, object]]:
+        return [
+            base_device("fake-switch-01", "重复设备", "test-room", self.device_type)
+        ]
+
+
+@pytest.fixture
+def storage(tmp_path: Path):
+    value = GatewayStorage(tmp_path / "drivers.db")
+    yield value
+    value.close()
+
+
+def test_new_driver_registers_and_dispatches_without_registry_changes(
+    storage: GatewayStorage,
+) -> None:
+    registry = DeviceRegistry(storage, drivers=[])
+    registry.register_driver(FakeSwitchDriver())
+    device = registry.get("fake-switch-01")
+
+    result, details = registry.execute(
+        device["id"],
+        "setPower",
+        {"power": True},
+        device["stateVersion"],
+    )
+
+    assert details is None
+    assert result is not None
+    assert result["power"] is True
+    assert result["stateVersion"] == 2
+
+
+def test_duplicate_driver_type_and_device_id_fail_fast(
+    storage: GatewayStorage,
+) -> None:
+    registry = DeviceRegistry(storage, drivers=[FakeSwitchDriver()])
+    with pytest.raises(ValueError, match="driver type"):
+        registry.register_driver(DuplicateTypeDriver())
+    with pytest.raises(ValueError, match="device id"):
+        registry.register_driver(DuplicateIdDriver())
+
+
+def test_common_offline_check_applies_to_registered_drivers(
+    storage: GatewayStorage,
+) -> None:
+    registry = DeviceRegistry(storage, drivers=[FakeSwitchDriver()])
+    registry.inject_fault("fake-switch-01", {"online": False})
+    device = registry.get("fake-switch-01")
+
+    with pytest.raises(GatewayError) as failure:
+        registry.execute(
+            device["id"],
+            "setPower",
+            {"power": True},
+            device["stateVersion"],
+        )
+
+    assert failure.value.code == DEVICE_OFFLINE
+
+
+def test_curtain_commands_and_ticks_progress_authoritative_state(
+    storage: GatewayStorage,
+) -> None:
+    registry = DeviceRegistry(storage)
+    curtain = registry.get("curtain-living-01")
+    assert curtain["controls"][0]["kind"] == "slider"
+
+    result, _ = registry.execute(
+        curtain["id"],
+        "setPosition",
+        {"positionPercent": 35},
+        curtain["stateVersion"],
+    )
+    assert result is not None
+    assert result["state"]["targetPositionPercent"] == 35
+    assert result["state"]["movement"] == "opening"
+
+    changed = registry.tick()
+    curtain_events = [item for item in changed if item["id"] == "curtain-living-01"]
+    assert curtain_events[0]["state"]["positionPercent"] == 10
+
+    curtain = registry.get("curtain-living-01")
+    registry.execute(curtain["id"], "stop", {}, curtain["stateVersion"])
+    assert curtain["state"]["targetPositionPercent"] == 10
+    assert curtain["state"]["movement"] == "stopped"
+
+    with pytest.raises(GatewayError) as invalid:
+        registry.execute(
+            curtain["id"],
+            "setPosition",
+            {"positionPercent": 101},
+            curtain["stateVersion"],
+        )
+    assert invalid.value.code == INVALID_COMMAND
+
+    curtain = registry.get("curtain-living-01")
+    registry.execute(curtain["id"], "open", {}, curtain["stateVersion"])
+    for _ in range(9):
+        registry.tick()
+    assert curtain["state"]["positionPercent"] == 100
+    assert curtain["state"]["movement"] == "stopped"
+
+    registry.execute(curtain["id"], "close", {}, curtain["stateVersion"])
+    registry.tick()
+    assert curtain["state"]["positionPercent"] == 90
+    assert curtain["state"]["movement"] == "closing"

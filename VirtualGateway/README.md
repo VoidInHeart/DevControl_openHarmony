@@ -35,3 +35,14 @@ python -m pip install -r requirements.txt
 启动日志会显示随机六位一次性配对码。配对成功或五分钟到期后，该码立即轮换；如确需可重复的首个调试码，可显式传入 `-InitialPairingCode`，不要把固定码写入仓库。客户端凭据默认有效 24 小时，可用 `-CredentialTtlSeconds` 调整；到期后 HTTP 和已建立的 WSS 都会返回认证失败，APP 需要重新配对。
 
 演示证书和调试配对机制仅用于本地开发，不适用于生产环境。
+
+## 新设备驱动扩展
+
+网关通过 `DeviceDriver` 显式注册设备族：
+
+1. 在 `devcontrol_gateway/drivers.py` 实现 `create_devices`、`execute`，需要连续状态变化时再实现 `tick`。
+2. 将驱动加入 `default_drivers()`；注册表会拒绝重复设备类型、重复设备编号和类型不一致的初始设备。
+3. 通用设备在快照中提供受限的 `category/state/controls` 描述，APP 即可自动分组并生成控制页。
+4. 在线检查、状态版本、故障注入、审计、命令幂等和 WSS 状态事件由注册表与服务层统一处理。
+
+智能窗帘是该扩展链路的默认示例。真实厂商设备应通过公开 SDK 或合法协议实现独立驱动，不得把模拟兼容名称用于商用兼容声明。
