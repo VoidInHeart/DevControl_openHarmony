@@ -21,7 +21,9 @@ export struct ControlCenterTab {
         this.HomeHeader()
         this.RoomSegments()
         this.StatusStrip()
-        this.FeatureSection()
+        if (this.selectedRoom === 'all') {
+          this.FeatureSection()
+        }
         this.DeviceSection()
       }
       .width('100%')
