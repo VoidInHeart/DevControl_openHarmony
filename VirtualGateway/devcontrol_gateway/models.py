@@ -36,7 +36,7 @@ class SecureCommandEnvelope(BaseModel):
     action: str = Field(min_length=1, max_length=64)
     expectedStateVersion: int | None = Field(default=None, ge=0)
     nonce: str = Field(min_length=16, max_length=32)
-    ciphertext: str = Field(min_length=1)
+    ciphertext: str = Field(min_length=1, max_length=32_768)
     authTag: str = Field(min_length=16, max_length=32)
 
     @field_validator("messageId", "nonce", "ciphertext", "authTag")

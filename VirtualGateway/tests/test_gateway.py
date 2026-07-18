@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from devcontrol_gateway.app import create_app
+from devcontrol_gateway.app import _sse_event_stream, create_app
 from devcontrol_gateway.composition import default_drivers
 from devcontrol_gateway.config import GatewayConfig
 from devcontrol_gateway.errors import AUTH_FAILED, RATE_LIMITED
@@ -374,6 +373,11 @@ def test_rest_and_websocket_contract(tmp_path: Path) -> None:
         health = client.get("/api/v1/health")
         assert health.status_code == 200
         assert health.json()["protocolVersion"] == "1.0"
+        transports = {item["id"]: item for item in health.json()["transports"]}
+        assert {"https-rest", "wss", "https-sse", "mqtt5-tls"} <= set(transports)
+        assert transports["mqtt5-tls"]["available"] is True
+        assert transports["mqtt5-tls"]["enabled"] is False
+        assert health.headers["strict-transport-security"].startswith("max-age=")
 
         paired = client.post(
             "/api/v1/pair",
@@ -394,12 +398,29 @@ def test_rest_and_websocket_contract(tmp_path: Path) -> None:
         assert any(item["type"] == "fan" for item in snapshot.json()["devices"])
 
         light = gateway.devices.get("light-living-01")
-        envelope = command(
+        rest_envelope = command(
             session,
             device_id=light["id"],
             action="setPower",
             expected_version=light["stateVersion"],
             payload={"power": True},
+        )
+        rest_result = client.post(
+            "/api/v1/commands",
+            headers=headers,
+            json=rest_envelope.model_dump(),
+        )
+        assert rest_result.status_code == 200
+        assert rest_result.json()["success"] is True
+        assert gateway.devices.get(light["id"])["power"] is True
+
+        light = gateway.devices.get("light-living-01")
+        envelope = command(
+            session,
+            device_id=light["id"],
+            action="setBrightness",
+            expected_version=light["stateVersion"],
+            payload={"brightness": 61},
         )
         with client.websocket_connect("/ws/v1/events", headers=headers) as websocket:
             heartbeat = websocket.receive_json()
@@ -427,6 +448,38 @@ def test_rest_and_websocket_contract(tmp_path: Path) -> None:
         logs = client.get("/api/v1/logs", headers=headers)
         assert logs.status_code == 200
         assert logs.json()["items"]
+
+
+def test_sse_stream_uses_bearer_session_and_broadcast_sink(
+    service: GatewayService,
+) -> None:
+    credential, _ = pair(service)
+
+    async def exercise() -> tuple[bytes, bytes]:
+        async def connected() -> bool:
+            return False
+
+        stream = _sse_event_stream(service, credential, connected)
+        heartbeat = await anext(stream)
+        next_event = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0)
+        await service.broadcast(
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "type": "state.changed",
+                "timestamp": now_ms(),
+                "deviceId": "light-living-01",
+                "stateVersion": 2,
+            }
+        )
+        event = await asyncio.wait_for(next_event, timeout=1)
+        await stream.aclose()
+        return heartbeat, event
+
+    heartbeat, event = asyncio.run(exercise())
+    assert heartbeat.startswith(b"event: heartbeat\n")
+    assert b'"type":"state.changed"' in event
+    assert not service._sinks
 
 
 def test_curtain_secure_command_is_idempotent_and_emits_state(

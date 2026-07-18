@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Annotated, Any
 
 from fastapi import (
@@ -13,7 +15,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
 from .config import GatewayConfig
@@ -27,6 +29,87 @@ from .models import (
 )
 from .security import ClientSession, now_ms
 from .service import GatewayService
+
+
+def _transport_capabilities(config: GatewayConfig) -> list[dict[str, object]]:
+    return [
+        {
+            "id": "https-rest",
+            "enabled": True,
+            "mode": "request-response",
+            "security": "TLS 1.2+, Bearer, AES-256-GCM commands",
+        },
+        {
+            "id": "wss",
+            "enabled": True,
+            "mode": "bidirectional-events",
+            "security": "TLS 1.2+, Bearer, AES-256-GCM commands",
+        },
+        {
+            "id": "https-sse",
+            "enabled": True,
+            "mode": "server-events",
+            "security": "TLS 1.2+, Bearer",
+        },
+        {
+            "id": "mqtt5-tls",
+            "available": True,
+            "enabled": config.mqtt_enabled,
+            "mode": "publish-subscribe",
+            "security": "TLS 1.2+, broker authentication, AES-256-GCM commands",
+        },
+    ]
+
+
+def _encode_sse(event: dict[str, Any]) -> bytes:
+    event_type = str(event.get("type", "message"))
+    payload = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+    return f"event: {event_type}\ndata: {payload}\n\n".encode("utf-8")
+
+
+async def _sse_event_stream(
+    gateway: GatewayService,
+    credential: str,
+    disconnected: Callable[[], Awaitable[bool]],
+) -> AsyncIterator[bytes]:
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=64)
+
+    async def sink(event: dict[str, Any]) -> None:
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        queue.put_nowait(event)
+
+    gateway.add_sink(sink)
+    try:
+        yield _encode_sse(
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "type": "heartbeat",
+                "timestamp": now_ms(),
+            }
+        )
+        while not await disconnected():
+            try:
+                session = gateway.sessions.authenticate(credential)
+            except GatewayError:
+                return
+            timeout = min(15.0, gateway.sessions.remaining_seconds(session))
+            if timeout <= 0:
+                return
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=timeout)
+            except TimeoutError:
+                event = {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "type": "heartbeat",
+                    "timestamp": now_ms(),
+                }
+            yield _encode_sse(event)
+    finally:
+        gateway.remove_sink(sink)
 
 
 def _extract_bearer(authorization: str | None) -> str:
@@ -57,6 +140,36 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.gateway = gateway
+
+    @app.middleware("http")
+    async def transport_security_headers(
+        request: Request, call_next: Callable[[Request], Awaitable[Any]]
+    ) -> Any:
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                oversized = int(content_length) > effective_config.max_transport_message_bytes
+            except ValueError:
+                oversized = True
+            if oversized:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "error": {
+                            "code": "INVALID_COMMAND",
+                            "message": "请求正文超过安全限制",
+                        }
+                    },
+                )
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Referrer-Policy"] = "no-referrer"
+        return response
 
     @app.exception_handler(GatewayError)
     async def gateway_error_handler(
@@ -91,6 +204,7 @@ def create_app(
             "protocolVersion": PROTOCOL_VERSION,
             "gatewayVersion": "1.1.0",
             "serverTime": now_ms(),
+            "transports": _transport_capabilities(effective_config),
         }
 
     @app.post("/api/v1/pair")
@@ -143,6 +257,33 @@ def create_app(
             "deviceId": deviceId,
             "items": items,
         }
+
+    @app.post("/api/v1/commands")
+    async def commands(
+        body: SecureCommandEnvelope,
+        session: ClientSession = Depends(require_session),
+    ) -> dict[str, object]:
+        result, state_events = await gateway.process_command(session, body)
+        for event in state_events:
+            await gateway.broadcast(event)
+        return result
+
+    @app.get("/api/v1/events")
+    async def server_sent_events(
+        request: Request,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> StreamingResponse:
+        credential = _extract_bearer(authorization)
+        gateway.sessions.authenticate(credential)
+        return StreamingResponse(
+            _sse_event_stream(gateway, credential, request.is_disconnected),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
     @app.websocket("/ws/v1/events")
     async def events(websocket: WebSocket) -> None:

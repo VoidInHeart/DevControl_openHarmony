@@ -1,6 +1,6 @@
 # VirtualGateway
 
-DevControl 的独立虚拟家庭网关。该工程使用 Python 3.11～3.13、FastAPI、HTTPS/WSS 和 SQLite，负责模拟设备、权威状态、配对鉴权、加密命令、审计与故障注入。
+DevControl 的独立虚拟家庭网关。该工程使用 Python 3.11～3.13、FastAPI、HTTPS/WSS/SSE、可选 MQTT 5 over TLS 和 SQLite，负责模拟设备、权威状态、配对鉴权、加密命令、审计与故障注入。
 
 ## 目录
 
