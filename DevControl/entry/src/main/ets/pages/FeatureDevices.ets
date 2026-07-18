@@ -36,7 +36,7 @@ struct FeatureDevices {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#EAF5FF')
+    .backgroundColor('#DCEAF2')
   }
 
   @Builder
@@ -44,7 +44,7 @@ struct FeatureDevices {
     Row() {
       Text('‹')
         .fontSize(40)
-        .fontColor($r('app.color.text_primary'))
+        .fontColor('#14263A')
         .width(44)
         .height(48)
         .textAlign(TextAlign.Center)
@@ -54,13 +54,13 @@ struct FeatureDevices {
       Text(this.featureTitle())
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
+        .fontColor('#14263A')
         .layoutWeight(1)
     }
     .width('100%')
     .height(64)
     .padding({ left: 8, right: 20 })
-    .backgroundColor(Color.White)
+    .backgroundColor('#DCEAF2')
   }
 
   @Builder
