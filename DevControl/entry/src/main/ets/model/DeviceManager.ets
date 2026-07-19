@@ -15,6 +15,8 @@ import {
   EnvironmentHistoryPoint,
   GatewaySession,
   LightDevice,
+  RoomInfo,
+  parseRoom,
   parseDevice,
   SceneDeviceAction,
   SceneExecutionDetail
@@ -40,6 +42,7 @@ import {
 @Observed
 export class DeviceManager implements GatewayTransportListener {
   devices: DeviceInfo[] = [];
+  rooms: RoomInfo[] = [];
   deviceStateRevision: number = 0;
   accessLogs: AccessLogEntry[] = [];
   alerts: AlertEntry[] = [];
@@ -192,6 +195,7 @@ export class DeviceManager implements GatewayTransportListener {
     }
     this.session = null;
     this.devices = [];
+    this.rooms = [];
     this.bumpDeviceStateRevision();
     this.accessLogs = [];
     this.alerts = [];
@@ -248,6 +252,17 @@ export class DeviceManager implements GatewayTransportListener {
       }
       return;
     }
+    if (type === 'room.created') {
+      const rawRoom = message['room'];
+      if (typeof rawRoom === 'object' && rawRoom !== null && !Array.isArray(rawRoom)) {
+        try {
+          this.upsertRoom(parseRoom(rawRoom as Record<string, Object>));
+        } catch (error) {
+          this.setError('INVALID_COMMAND', '网关房间字段校验失败');
+        }
+      }
+      return;
+    }
     if (type === 'command.result') {
       this.handleCommandResult(message);
       return;
@@ -271,7 +286,9 @@ export class DeviceManager implements GatewayTransportListener {
     }
     try {
       const snapshot = await this.transport.fetchDeviceSnapshot();
+      const rooms = await this.transport.fetchRooms();
       this.devices = snapshot;
+      this.rooms = rooms;
       this.bumpDeviceStateRevision();
       this.lastSyncAt = Date.now();
       if (this.snapshotStore !== null) {
@@ -401,6 +418,22 @@ export class DeviceManager implements GatewayTransportListener {
     }
   }
 
+  async createRoom(roomId: string, name: string): Promise<RoomInfo | null> {
+    if (!this.isOnline()) {
+      this.setError('AUTH_FAILED', '网关离线，无法新建房间');
+      return null;
+    }
+    try {
+      const room = await this.transport.createRoom(roomId, name);
+      this.upsertRoom(room);
+      this.lastError = '';
+      return room;
+    } catch (error) {
+      this.setErrorFromException(error);
+      return null;
+    }
+  }
+
   async refreshLogs(): Promise<void> {
     try {
       const raw = await this.transport.fetchLogs(50);
@@ -460,6 +493,25 @@ export class DeviceManager implements GatewayTransportListener {
 
   getRoomIds(): string[] {
     return DeviceRegistry.getRoomIds(this.devices);
+  }
+
+  getSelectableRooms(): RoomInfo[] {
+    const result: RoomInfo[] = [];
+    for (let index = 0; index < this.rooms.length; index++) {
+      if (this.rooms[index].selectable) {
+        result.push(this.rooms[index]);
+      }
+    }
+    return result;
+  }
+
+  getRoomName(roomId: string): string {
+    for (let index = 0; index < this.rooms.length; index++) {
+      if (this.rooms[index].id === roomId) {
+        return this.rooms[index].name;
+      }
+    }
+    return DeviceRegistry.getRoomLabel(roomId);
   }
 
   getLights(): LightDevice[] {
@@ -845,6 +897,23 @@ export class DeviceManager implements GatewayTransportListener {
     this.devices = result;
     this.bumpDeviceStateRevision();
     this.lastSyncAt = Date.now();
+  }
+
+  private upsertRoom(incoming: RoomInfo): void {
+    const result: RoomInfo[] = [];
+    let found = false;
+    for (let index = 0; index < this.rooms.length; index++) {
+      if (this.rooms[index].id === incoming.id) {
+        result.push(incoming);
+        found = true;
+      } else {
+        result.push(this.rooms[index]);
+      }
+    }
+    if (!found) {
+      result.push(incoming);
+    }
+    this.rooms = result;
   }
 
   private handleCommandResult(message: Record<string, Object>): void {

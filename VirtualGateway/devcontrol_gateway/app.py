@@ -29,6 +29,7 @@ from .models import (
     FaultRequest,
     PairRequest,
     PROTOCOL_VERSION,
+    RoomCreateRequest,
     SecureCommandEnvelope,
 )
 from .security import ClientSession, now_ms
@@ -309,6 +310,31 @@ def create_app(
             "serverTime": now_ms(),
             "devices": gateway.devices.snapshot(),
         }
+
+    @app.get("/api/v1/rooms")
+    async def rooms(
+        session: ClientSession = Depends(require_session),
+    ) -> dict[str, object]:
+        del session
+        return {
+            "protocolVersion": PROTOCOL_VERSION,
+            "rooms": gateway.rooms_snapshot(),
+        }
+
+    @app.post("/api/v1/rooms")
+    async def create_room(
+        body: RoomCreateRequest,
+        session: ClientSession = Depends(require_session),
+    ) -> dict[str, object]:
+        room = await gateway.create_room(session, body)
+        await gateway.broadcast(
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "type": "room.created",
+                "room": room,
+            }
+        )
+        return {"room": room}
 
     @app.post("/api/v1/devices/register")
     async def register_device(

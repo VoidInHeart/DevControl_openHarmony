@@ -3,7 +3,6 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { detectBarcode } from '@kit.ScanKit';
 import { DeviceApplication } from '../model/DeviceApplication';
 import { DeviceManager } from '../model/DeviceManager';
-import { DeviceRegistry } from '../model/DeviceRegistry';
 import {
   DeviceRegistrationQr,
   DeviceRegistrationRequest
@@ -361,7 +360,7 @@ struct AddDevice {
       this.statusIsError = !result.registered;
       if (result.registered) {
         this.statusMessage = '设备已添加，将在 1.5 秒后进入' +
-          DeviceRegistry.getRoomLabel(this.selectedRoomId);
+          this.deviceManager.getRoomName(this.selectedRoomId);
         this.scheduleRoomNavigation(this.selectedRoomId);
       } else {
         this.statusMessage = result.message;
@@ -414,23 +413,20 @@ struct AddDevice {
   }
 
   private selectableRoomIds(): string[] {
-    const allRoomIds = this.deviceManager.getRoomIds();
     const result: string[] = [];
-    for (let index = 0; index < allRoomIds.length; index++) {
-      const roomId = allRoomIds[index];
-      if (this.deviceManager.getDevicesByRoom(roomId).length > 0) {
-        result.push(roomId);
-      }
+    const rooms = this.deviceManager.getSelectableRooms();
+    for (let index = 0; index < rooms.length; index++) {
+      result.push(rooms[index].id);
     }
     return result;
   }
 
   private roomSelectionOptions(): RoomSelectOption[] {
-    const roomIds = this.selectableRoomIds();
+    const rooms = this.deviceManager.getSelectableRooms();
     const options: RoomSelectOption[] = [];
-    for (let index = 0; index < roomIds.length; index++) {
+    for (let index = 0; index < rooms.length; index++) {
       const option = new RoomSelectOption();
-      option.value = DeviceRegistry.getRoomLabel(roomIds[index]);
+      option.value = rooms[index].name;
       options.push(option);
     }
     return options;

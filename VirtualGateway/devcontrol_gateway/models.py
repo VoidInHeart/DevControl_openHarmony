@@ -111,6 +111,29 @@ class DeviceRegistrationRequest(DeviceIdentityDeclaration):
         return value
 
 
+class RoomCreateRequest(BaseModel):
+    """A user-created room that may receive dynamically registered devices."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    roomId: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("roomId")
+    @classmethod
+    def valid_room_id(cls, value: str) -> str:
+        if not IDENTIFIER_PATTERN.fullmatch(value):
+            raise ValueError("roomId has an invalid format")
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def valid_room_name(cls, value: str) -> str:
+        if not DEVICE_NAME_PATTERN.fullmatch(value) or not value.strip():
+            raise ValueError("room name must be visible text and cannot be blank")
+        return value.strip()
+
+
 class SecureCommandEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
