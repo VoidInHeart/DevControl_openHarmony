@@ -3,6 +3,7 @@
     "products": [
       {
         "name": "default",
+        "signingConfig": "default",
         "targetSdkVersion": "6.1.1(24)",
         "compatibleSdkVersion": "6.1.1(24)",
         "runtimeOS": "HarmonyOS",
@@ -21,6 +22,21 @@
       },
       {
         "name": "release"
+      }
+    ],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\RoyCai\\.ohos\\config\\default_DevControl_Iwo7oKOo1RbPSXGLTq2_YtjN2xRL_2P0CPonCpfoD3I=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B48177465FBDF78BDF403B38449C991EF62967884364EAE83B9EF31F866A09BEC472B9A4A5C4864",
+          "profile": "C:\\Users\\RoyCai\\.ohos\\config\\default_DevControl_Iwo7oKOo1RbPSXGLTq2_YtjN2xRL_2P0CPonCpfoD3I=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\RoyCai\\.ohos\\config\\default_DevControl_Iwo7oKOo1RbPSXGLTq2_YtjN2xRL_2P0CPonCpfoD3I=.p12",
+          "storePassword": "0000001B3ACF65A32BE04FA7700CB198AC62CB7AF5BE2F3D15CD59546451CB52FD483BFBB23BFF26475087"
+        }
       }
     ]
   },

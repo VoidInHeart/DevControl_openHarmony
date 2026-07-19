@@ -56,6 +56,11 @@ class GatewayStorage:
                 );
                 CREATE INDEX IF NOT EXISTS idx_environment_device_time
                     ON environment_history(device_id, timestamp_ms DESC);
+
+                CREATE TABLE IF NOT EXISTS consumed_registration_proofs (
+                    jti TEXT PRIMARY KEY,
+                    expires_at_ms INTEGER NOT NULL
+                );
                 """
             )
 
@@ -236,6 +241,29 @@ class GatewayStorage:
                 "DELETE FROM environment_history WHERE timestamp_ms < ?",
                 (before_ms,),
             )
+
+    def registration_proof_is_consumed(self, jti: str, now_ms: int) -> bool:
+        with self._lock, self._connection:
+            self._connection.execute(
+                "DELETE FROM consumed_registration_proofs WHERE expires_at_ms < ?",
+                (now_ms,),
+            )
+            row = self._connection.execute(
+                "SELECT 1 FROM consumed_registration_proofs WHERE jti = ?",
+                (jti,),
+            ).fetchone()
+        return row is not None
+
+    def consume_registration_proof(self, jti: str, expires_at_ms: int) -> bool:
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                """
+                INSERT OR IGNORE INTO consumed_registration_proofs (jti, expires_at_ms)
+                VALUES (?, ?)
+                """,
+                (jti, expires_at_ms),
+            )
+        return cursor.rowcount == 1
 
     def table_columns(self, table: str) -> list[str]:
         with self._lock:

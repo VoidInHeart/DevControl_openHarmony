@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Create a DevControl device-registration QR image without handling private keys.
+"""Create a persistent DevControl device-registration QR image without handling private keys.
 
-The signed gateway proof must be produced by the gateway/provisioning service.
-This tool only packages that proof with the public device declaration.
+The signed device identity certificate must be produced by the gateway provisioning
+service. This tool only packages that certificate with the public declaration.
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ import re
 import sys
 from pathlib import Path
 from urllib.parse import quote
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 try:
     import qrcode
@@ -83,8 +85,16 @@ def arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--gateway-proof",
-        required=True,
-        help="Compact JWS issued by the gateway provisioning service",
+        help="Existing static device-certificate JWS (normally use the provisioning API)",
+    )
+    parser.add_argument(
+        "--admin-url",
+        default="http://127.0.0.1:18444/admin/v1/devices/provision",
+        help="Loopback VirtualGateway provisioning endpoint",
+    )
+    parser.add_argument(
+        "--admin-token",
+        help="X-Admin-Token printed when VirtualGateway starts; never stored in the QR",
     )
     parser.add_argument(
         "--output",
@@ -104,10 +114,56 @@ def arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def issue_gateway_proof(
+    args: argparse.Namespace, declaration: dict[str, object]
+) -> str:
+    if args.gateway_proof:
+        return compact_jws(args.gateway_proof)
+    if not args.admin_token:
+        raise ValueError(
+            "admin-token is required when gateway-proof is not supplied; "
+            "start VirtualGateway and use its printed X-Admin-Token"
+        )
+    if not (
+        args.admin_url.startswith("http://127.0.0.1:")
+        or args.admin_url.startswith("http://localhost:")
+        or args.admin_url.startswith("https://")
+    ):
+        raise ValueError("admin-url must be loopback HTTP or HTTPS")
+    body = json.dumps(declaration, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    request = Request(
+        args.admin_url,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "X-Admin-Token": args.admin_token,
+        },
+    )
+    try:
+        with urlopen(request, timeout=5) as response:
+            raw = response.read().decode("utf-8")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise ValueError(f"gateway provisioning failed ({exc.code}): {detail}") from exc
+    except URLError as exc:
+        raise ValueError(f"gateway provisioning is unavailable: {exc.reason}") from exc
+    try:
+        reply = json.loads(raw)
+        proof = reply["gatewayProof"]
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("gateway provisioning returned no valid gatewayProof") from exc
+    if not isinstance(proof, str):
+        raise ValueError("gateway provisioning returned a non-string gatewayProof")
+    return compact_jws(proof)
+
+
 def main() -> int:
     args = arguments()
     try:
-        manifest = {
+        declaration = {
             "schema": "devcontrol.device-registration",
             "protocolVersion": "1.0",
             "deviceId": device_id(args.device_id),
@@ -116,8 +172,14 @@ def main() -> int:
             "categoryId": identifier(args.category_id, "category-id"),
             "roomId": identifier(args.room_id, "room-id"),
             "capabilities": capabilities(args.capabilities),
+        }
+        proof_declaration = {
+            key: value for key, value in declaration.items() if key != "schema"
+        }
+        manifest = {
+            **declaration,
             "gatewayProofFormat": "jws",
-            "gatewayProof": compact_jws(args.gateway_proof),
+            "gatewayProof": issue_gateway_proof(args, proof_declaration),
         }
     except ValueError as exc:
         print(f"Invalid registration declaration: {exc}", file=sys.stderr)

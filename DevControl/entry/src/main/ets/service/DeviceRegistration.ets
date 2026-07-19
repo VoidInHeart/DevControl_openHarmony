@@ -10,6 +10,7 @@ const MAX_QR_PAYLOAD_LENGTH: number = 8192;
  * proof before it makes a device visible in a snapshot.
  */
 export class DeviceRegistrationRequest {
+  schema: string = 'devcontrol.device-registration';
   protocolVersion: string = '1.0';
   deviceId: string = '';
   deviceName: string = '';
@@ -30,6 +31,16 @@ export class DeviceRegistrationReceipt {
 export class DeviceRegistrationResult {
   registered: boolean = false;
   online: boolean = false;
+  message: string = '';
+}
+
+export class DeviceRemovalReceipt {
+  deviceId: string = '';
+  deleted: boolean = false;
+}
+
+export class DeviceRemovalResult {
+  deleted: boolean = false;
   message: string = '';
 }
 
@@ -75,10 +86,12 @@ export class DeviceRegistrationQr {
   }
 
   private static parseManifest(raw: Record<string, Object>): DeviceRegistrationRequest {
-    if (DeviceRegistrationQr.requireString(raw, 'schema', 64) !== 'devcontrol.device-registration') {
+    const schema = DeviceRegistrationQr.requireString(raw, 'schema', 64);
+    if (schema !== 'devcontrol.device-registration') {
       throw new Error('不支持的二维码注册格式');
     }
     const request = new DeviceRegistrationRequest();
+    request.schema = schema;
     request.protocolVersion = DeviceRegistrationQr.requireString(raw, 'protocolVersion', 16);
     if (request.protocolVersion !== '1.0') {
       throw new Error('不支持的二维码协议版本');

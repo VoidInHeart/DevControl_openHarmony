@@ -163,7 +163,7 @@ struct Index {
     }
     .width('100%')
     .height(68)
-    .padding({ left: 28, right: 28, top: 4, bottom: 6 })
+    .padding({ left: 28, right: 28, top: 5, bottom: 5 })
     .justifyContent(FlexAlign.SpaceBetween)
     .backgroundColor(Color.White)
   }
@@ -175,11 +175,19 @@ struct Index {
         .fontSize(27)
         .fontWeight(FontWeight.Bold)
         .fontColor(tab === this.currentTab ? '#1769C2' : '#6F8094')
+        .width(32)
+        .height(30)
+        .lineHeight(30)
+        .textAlign(TextAlign.Center)
         .opacity(1)
       Text(label)
         .fontSize(12)
         .fontWeight(tab === this.currentTab ? FontWeight.Bold : FontWeight.Normal)
         .fontColor(tab === this.currentTab ? '#1769C2' : '#6F8094')
+        .width(40)
+        .height(18)
+        .lineHeight(18)
+        .textAlign(TextAlign.Center)
         .opacity(1)
         .margin({ top: 2 })
     }

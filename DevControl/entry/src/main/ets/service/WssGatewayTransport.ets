@@ -10,6 +10,7 @@ import {
   parseDevices
 } from '../model/DeviceModel';
 import {
+  DeviceRemovalReceipt,
   DeviceRegistrationReceipt,
   DeviceRegistrationRequest
 } from './DeviceRegistration';
@@ -153,6 +154,7 @@ export class WssGatewayTransport implements GatewayTransport {
   async registerDevice(request: DeviceRegistrationRequest): Promise<DeviceRegistrationReceipt> {
     const session = this.requireSession();
     const body: Record<string, Object> = {
+      'schema': request.schema,
       'protocolVersion': request.protocolVersion,
       'deviceId': request.deviceId,
       'deviceName': request.deviceName,
@@ -184,6 +186,29 @@ export class WssGatewayTransport implements GatewayTransport {
     receipt.deviceId = deviceId;
     receipt.accepted = accepted;
     receipt.online = online;
+    return receipt;
+  }
+
+  async deleteDevice(deviceId: string): Promise<DeviceRemovalReceipt> {
+    const session = this.requireSession();
+    const response = await this.request(
+      session.gatewayAddress + '/api/v1/devices/' + encodeURIComponent(deviceId),
+      http.RequestMethod.DELETE,
+      null,
+      session.credential
+    );
+    const responseDeviceId = response['deviceId'];
+    const deleted = response['deleted'];
+    if (
+      typeof responseDeviceId !== 'string' ||
+      responseDeviceId !== deviceId ||
+      typeof deleted !== 'boolean'
+    ) {
+      throw new Error('INVALID_COMMAND:网关返回了无效的设备删除结果');
+    }
+    const receipt = new DeviceRemovalReceipt();
+    receipt.deviceId = responseDeviceId;
+    receipt.deleted = deleted;
     return receipt;
   }
 
@@ -335,9 +360,10 @@ export class WssGatewayTransport implements GatewayTransport {
       throw new Error('INVALID_COMMAND:仅允许 HTTPS/WSS 安全传输');
     }
     const request = http.createHttp();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
+    const headers: Record<string, string> = {};
+    if (body !== null) {
+      headers['Content-Type'] = 'application/json';
+    }
     if (credential.length > 0) {
       headers['Authorization'] = 'Bearer ' + credential;
     }
@@ -345,11 +371,17 @@ export class WssGatewayTransport implements GatewayTransport {
       const options: http.HttpRequestOptions = {
         method: method,
         header: headers,
-        extraData: body === null ? '' : JSON.stringify(body),
         expectDataType: http.HttpDataType.STRING,
         connectTimeout: 5000,
         readTimeout: 5000
       };
+      // OpenHarmony NetStack rejects a DELETE that carries an empty
+      // `extraData` value with its local BusinessError 401 (Parameter error).
+      // Leave it absent for bodyless requests instead of serializing an empty
+      // JSON body; the gateway's DELETE endpoint intentionally has no body.
+      if (body !== null) {
+        options.extraData = JSON.stringify(body);
+      }
       if (this.caPath.length > 0) {
         options.caPath = this.caPath;
       }
@@ -358,8 +390,10 @@ export class WssGatewayTransport implements GatewayTransport {
       const parsed = JSON.parse(text) as Record<string, Object>;
       if (response.responseCode < 200 || response.responseCode >= 300) {
         const error = parsed['error'] as Record<string, Object>;
+        const detail = parsed['detail'];
         const code = error !== undefined ? error['code'] as string : 'INTERNAL_ERROR';
-        const message = error !== undefined ? error['message'] as string : '网关请求失败';
+        const message = error !== undefined ? error['message'] as string :
+          (detail !== undefined ? '网关拒绝了请求参数，请更新 App 后重试' : '网关请求失败');
         throw new Error(code + ':' + message);
       }
       return parsed;

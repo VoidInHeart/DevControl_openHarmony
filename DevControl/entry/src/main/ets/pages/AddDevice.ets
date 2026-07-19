@@ -3,6 +3,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { detectBarcode } from '@kit.ScanKit';
 import { DeviceApplication } from '../model/DeviceApplication';
 import { DeviceManager } from '../model/DeviceManager';
+import { DeviceRegistry } from '../model/DeviceRegistry';
 import {
   DeviceRegistrationQr,
   DeviceRegistrationRequest
@@ -16,8 +17,14 @@ struct AddDevice {
   @State registrationRequest: DeviceRegistrationRequest | null = null;
   @State isRecognizing: boolean = false;
   @State isRegistering: boolean = false;
+  @State isRedirecting: boolean = false;
   @State statusMessage: string = '';
   @State statusIsError: boolean = false;
+  private roomNavigationTimer: number = -1;
+
+  aboutToDisappear(): void {
+    this.cancelRoomNavigation();
+  }
 
   build() {
     Scroll() {
@@ -206,7 +213,8 @@ struct AddDevice {
         .lineHeight(18)
         .width('100%')
         .margin({ top: 10, bottom: 14 })
-      Button(this.isRegistering ? '正在验证…' : '验证并添加设备')
+      Button(this.isRegistering ? '正在验证…' :
+        (this.isRedirecting ? '即将跳转…' : '验证并添加设备'))
         .id('add-device-register-button')
         .width('100%')
         .height(48)
@@ -215,7 +223,7 @@ struct AddDevice {
         .fontColor(Color.White)
         .backgroundColor('#1769C2')
         .borderRadius(16)
-        .enabled(!this.isRegistering && this.deviceManager.isOnline())
+        .enabled(!this.isRegistering && !this.isRedirecting && this.deviceManager.isOnline())
         .onClick(() => {
           this.registerRecognizedDevice();
         })
@@ -254,6 +262,8 @@ struct AddDevice {
   }
 
   private async selectQrFromGallery(): Promise<void> {
+    this.cancelRoomNavigation();
+    this.isRedirecting = false;
     this.statusMessage = '';
     this.registrationRequest = null;
     const options = new photoAccessHelper.PhotoSelectOptions();
@@ -290,13 +300,37 @@ struct AddDevice {
       return;
     }
     this.isRegistering = true;
+    this.isRedirecting = false;
     this.statusMessage = '';
     try {
       const result = await this.deviceManager.registerDevice(request);
       this.statusIsError = !result.registered;
-      this.statusMessage = result.message;
+      if (result.registered) {
+        this.statusMessage = '设备已添加，将在 1.5 秒后进入' +
+          DeviceRegistry.getRoomLabel(request.roomId);
+        this.scheduleRoomNavigation(request.roomId);
+      } else {
+        this.statusMessage = result.message;
+      }
     } finally {
       this.isRegistering = false;
+    }
+  }
+
+  private scheduleRoomNavigation(roomId: string): void {
+    this.cancelRoomNavigation();
+    this.isRedirecting = true;
+    this.roomNavigationTimer = setTimeout(() => {
+      this.roomNavigationTimer = -1;
+      AppStorage.setOrCreate('homeSelectedRoom', roomId);
+      router.back();
+    }, 1500) as number;
+  }
+
+  private cancelRoomNavigation(): void {
+    if (this.roomNavigationTimer !== -1) {
+      clearTimeout(this.roomNavigationTimer);
+      this.roomNavigationTimer = -1;
     }
   }
 

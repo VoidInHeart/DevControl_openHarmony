@@ -18,7 +18,7 @@ import { LockIcon } from './LockIcon';
 @Component
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
-  @State selectedRoom: string = 'all';
+  @StorageLink('homeSelectedRoom') selectedRoom: string = 'all';
   @State showMetricSheet: boolean = false;
   @State activeMetric: string = '';
   private roomSegmentsScroller: Scroller = new Scroller();

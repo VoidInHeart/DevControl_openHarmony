@@ -106,6 +106,7 @@ class DeviceRegistry:
         category_id = device.get("_categoryId")
         if isinstance(category_id, str):
             public["category"] = copy.deepcopy(self.categories[category_id])
+        public["removable"] = device.get("_removable") is True
         return public
 
     def get(self, device_id: str) -> dict[str, Any]:
@@ -113,6 +114,62 @@ class DeviceRegistry:
         if device is None:
             raise GatewayError(INVALID_COMMAND, "目标设备不存在")
         return device
+
+    def register_provisioned(
+        self,
+        *,
+        device_id: str,
+        name: str,
+        room_id: str,
+        device_type: str,
+        category_id: str,
+        capabilities: list[str],
+    ) -> dict[str, Any]:
+        driver = self.drivers.get(device_type)
+        if driver is None:
+            raise GatewayError(INVALID_COMMAND, "设备类型未注册")
+        # The driver is the device-facing boundary: it verifies that this
+        # declared type/category/capability set is actually accepted and can
+        # currently come online before the gateway records the registration.
+        device = driver.attest_registration(
+            device_id,
+            name,
+            room_id,
+            category_id,
+            capabilities,
+        )
+        if (
+            device.get("id") != device_id
+            or device.get("type") != device_type
+            or device.get("_categoryId") != category_id
+            or not device.get("online", False)
+        ):
+            raise GatewayError(INTERNAL_ERROR, "设备驱动未返回可在线注册的设备")
+        device["_registrationCapabilities"] = sorted(capabilities)
+
+        existing = self.devices.get(device_id)
+        if existing is not None:
+            same_registration = (
+                existing.get("_removable") is True
+                and existing.get("name") == name
+                and existing.get("roomId") == room_id
+                and existing.get("type") == device_type
+                and existing.get("_categoryId") == category_id
+                and existing.get("_registrationCapabilities") == sorted(capabilities)
+            )
+            if same_registration:
+                return self.public_device(existing)
+            raise GatewayError(INVALID_COMMAND, "设备序列号已被另一份设备声明占用")
+        self.devices[device_id] = device
+        return self.public_device(device)
+
+    def remove_provisioned(self, device_id: str) -> dict[str, Any]:
+        device = self.get(device_id)
+        if device.get("_removable") is not True:
+            raise GatewayError(INVALID_COMMAND, "该内置设备不支持移除")
+        public = self.public_device(device)
+        del self.devices[device_id]
+        return public
 
     def find_first(
         self, device_type: str, room_id: str | None = None

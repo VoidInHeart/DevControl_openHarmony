@@ -80,6 +80,16 @@ class DeviceDriver(ABC):
     ) -> None:
         raise GatewayError(INVALID_COMMAND, "该设备不接受控制命令")
 
+    def attest_registration(
+        self,
+        device_id: str,
+        name: str,
+        room_id: str,
+        category_id: str,
+        capabilities: list[str],
+    ) -> dict[str, Any]:
+        raise GatewayError(INVALID_COMMAND, "该设备类型暂不支持二维码注册")
+
     def tick(self, device: dict[str, Any], context: DriverContext) -> bool:
         return False
 
@@ -128,6 +138,28 @@ class LightDriver(DeviceDriver):
                 "_noPresenceSince": None,
             }
         )
+        return light
+
+    def attest_registration(
+        self,
+        device_id: str,
+        name: str,
+        room_id: str,
+        category_id: str,
+        capabilities: list[str],
+    ) -> dict[str, Any]:
+        required_capabilities = {
+            "setPower",
+            "setBrightness",
+            "setAutomationConfig",
+        }
+        if category_id != "lighting" or set(capabilities) != required_capabilities:
+            raise GatewayError(
+                INVALID_COMMAND,
+                "灯光设备必须声明 lighting 分类及完整的受支持能力",
+            )
+        light = self._light(device_id, name, room_id, 60)
+        light["_removable"] = True
         return light
 
     def execute(
@@ -230,6 +262,12 @@ class LightDriver(DeviceDriver):
 class EnvironmentDriver(DeviceDriver):
     device_type = "environment"
     tick_priority = 10
+    registration_capabilities = {
+        "reportTemperature",
+        "reportHumidity",
+        "reportIlluminance",
+        "reportPresence",
+    }
 
     def create_categories(self) -> list[dict[str, Any]]:
         return [
@@ -270,6 +308,27 @@ class EnvironmentDriver(DeviceDriver):
             }
         )
         return environment
+
+    def attest_registration(
+        self,
+        device_id: str,
+        name: str,
+        room_id: str,
+        category_id: str,
+        capabilities: list[str],
+    ) -> dict[str, Any]:
+        if (
+            category_id != "environment"
+            or set(capabilities) != self.registration_capabilities
+        ):
+            raise GatewayError(
+                INVALID_COMMAND,
+                "环境监测器必须声明 environment 分类及完整的受支持上报能力",
+            )
+        sensor = self._sensor(device_id, name, room_id, 24.0, 62.0, 95.0)
+        sensor["presence"] = False
+        sensor["_removable"] = True
+        return sensor
 
     def tick(self, device: dict[str, Any], context: DriverContext) -> bool:
         now = time.time()
@@ -331,6 +390,14 @@ class EnvironmentDriver(DeviceDriver):
 class AirConditionerDriver(DeviceDriver):
     device_type = "airConditioner"
     tick_priority = 20
+    registration_capabilities = {
+        "setPower",
+        "setMode",
+        "setTemperature",
+        "setFanSpeed",
+        "setDehumidify",
+        "setBrand",
+    }
 
     def create_devices(self) -> list[dict[str, Any]]:
         return [
@@ -362,6 +429,28 @@ class AirConditionerDriver(DeviceDriver):
                 "lastAdapterFrame": "",
             }
         )
+        return air_conditioner
+
+    def attest_registration(
+        self,
+        device_id: str,
+        name: str,
+        room_id: str,
+        category_id: str,
+        capabilities: list[str],
+    ) -> dict[str, Any]:
+        if (
+            category_id != "environment"
+            or set(capabilities) != self.registration_capabilities
+        ):
+            raise GatewayError(
+                INVALID_COMMAND,
+                "空调必须声明 environment 分类及完整的受支持控制能力",
+            )
+        air_conditioner = self._air_conditioner(
+            device_id, name, room_id, "generic", 24
+        )
+        air_conditioner["_removable"] = True
         return air_conditioner
 
     def execute(
@@ -486,11 +575,15 @@ class HumidifierDriver(DeviceDriver):
 
     device_type = "humidifier"
     tick_priority = 24
+    registration_capabilities = {"setPower", "setTargetHumidity"}
 
     def create_devices(self) -> list[dict[str, Any]]:
-        humidifier = base_device(
-            "humidifier-living-01", "客厅加湿器", "living", self.device_type
-        )
+        return [self._humidifier("humidifier-living-01", "客厅加湿器", "living")]
+
+    def _humidifier(
+        self, device_id: str, name: str, room_id: str
+    ) -> dict[str, Any]:
+        humidifier = base_device(device_id, name, room_id, self.device_type)
         humidifier.update(
             {
                 "_categoryId": "environment",
@@ -520,7 +613,27 @@ class HumidifierDriver(DeviceDriver):
                 ],
             }
         )
-        return [humidifier]
+        return humidifier
+
+    def attest_registration(
+        self,
+        device_id: str,
+        name: str,
+        room_id: str,
+        category_id: str,
+        capabilities: list[str],
+    ) -> dict[str, Any]:
+        if (
+            category_id != "environment"
+            or set(capabilities) != self.registration_capabilities
+        ):
+            raise GatewayError(
+                INVALID_COMMAND,
+                "加湿器必须声明 environment 分类及完整的受支持控制能力",
+            )
+        humidifier = self._humidifier(device_id, name, room_id)
+        humidifier["_removable"] = True
+        return humidifier
 
     def execute(
         self,

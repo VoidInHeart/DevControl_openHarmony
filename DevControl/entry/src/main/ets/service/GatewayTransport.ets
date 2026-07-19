@@ -5,6 +5,7 @@ import {
   GatewaySession
 } from '../model/DeviceModel';
 import {
+  DeviceRemovalReceipt,
   DeviceRegistrationReceipt,
   DeviceRegistrationRequest
 } from './DeviceRegistration';
@@ -25,6 +26,7 @@ export interface GatewayTransport {
   fetchAlerts(limit: number): Promise<Record<string, Object>[]>;
   fetchEnvironmentHistory(fromTimestamp: number): Promise<EnvironmentHistoryPoint[]>;
   registerDevice(request: DeviceRegistrationRequest): Promise<DeviceRegistrationReceipt>;
+  deleteDevice(deviceId: string): Promise<DeviceRemovalReceipt>;
   connect(listener: GatewayTransportListener): Promise<void>;
   sendCommand(
     deviceId: string,

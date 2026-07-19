@@ -20,6 +20,7 @@ export default function deviceRegistrationTest() {
   describe('DeviceRegistrationQr', () => {
     it('parses a signed capability declaration', 0, () => {
       const request = DeviceRegistrationQr.parse(validRegistrationText());
+      expect(request.schema).assertEqual('devcontrol.device-registration');
       expect(request.deviceId).assertEqual('CURTAIN-001');
       expect(request.deviceName).assertEqual('测试窗帘');
       expect(request.deviceType).assertEqual('curtain');

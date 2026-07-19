@@ -26,6 +26,7 @@ import { GatewaySessionStore } from '../service/GatewaySessionStore';
 import { PairingPreferenceStore } from '../service/PairingPreferenceStore';
 import { WssGatewayTransport } from '../service/WssGatewayTransport';
 import {
+  DeviceRemovalResult,
   DeviceRegistrationRequest,
   DeviceRegistrationResult
 } from '../service/DeviceRegistration';
@@ -49,7 +50,7 @@ export class DeviceManager implements GatewayTransportListener {
   initialized: boolean = false;
   pairingBusy: boolean = false;
   gatewayAddress: string = '';
-  lastGatewayAddress: string = 'https://192.168.1.100:8443';
+  lastGatewayAddress: string = '';
   lastError: string = '';
   lastErrorCode: string = '';
   lastSyncAt: number = 0;
@@ -239,6 +240,14 @@ export class DeviceManager implements GatewayTransportListener {
       }
       return;
     }
+    if (type === 'device.removed') {
+      const deviceId = message['deviceId'];
+      if (typeof deviceId === 'string') {
+        this.devices = this.devices.filter((device: DeviceInfo) => device.id !== deviceId);
+        this.bumpDeviceStateRevision();
+      }
+      return;
+    }
     if (type === 'command.result') {
       this.handleCommandResult(message);
       return;
@@ -340,8 +349,54 @@ export class DeviceManager implements GatewayTransportListener {
       result.message = '设备已注册并通过网关在线校验';
       return result;
     } catch (error) {
+      const registrationFailure = this.registrationFailureMessage(error);
+      if (registrationFailure.length > 0) {
+        this.setError('DEVICE_PROOF_INVALID', registrationFailure);
+        result.message = registrationFailure;
+        return result;
+      }
       this.setErrorFromException(error);
       result.message = this.lastError.length > 0 ? this.lastError : '设备注册失败';
+      return result;
+    }
+  }
+
+  async deleteDevice(deviceId: string): Promise<DeviceRemovalResult> {
+    const result = new DeviceRemovalResult();
+    const device = this.getDeviceById(deviceId);
+    if (device === null) {
+      result.message = '设备不存在或已被移除';
+      return result;
+    }
+    if (!device.removable) {
+      result.message = '该内置设备不支持移除';
+      return result;
+    }
+    if (!this.isOnline()) {
+      result.message = '网关离线，无法移除设备';
+      return result;
+    }
+    try {
+      const receipt = await this.transport.deleteDevice(deviceId);
+      if (!receipt.deleted) {
+        result.message = '网关未移除该设备';
+        return result;
+      }
+      const snapshotSynchronized = await this.refreshAll();
+      if (!snapshotSynchronized) {
+        result.message = '网关已移除设备，但设备快照同步失败';
+        return result;
+      }
+      if (this.getDeviceById(deviceId) !== null) {
+        result.message = '网关快照中仍存在该设备';
+        return result;
+      }
+      result.deleted = true;
+      result.message = '设备已移除';
+      return result;
+    } catch (error) {
+      this.setErrorFromException(error);
+      result.message = this.lastError.length > 0 ? this.lastError : '设备移除失败';
       return result;
     }
   }
@@ -927,6 +982,22 @@ export class DeviceManager implements GatewayTransportListener {
     }
   }
 
+  private registrationFailureMessage(error: Object): string {
+    const text = error instanceof Error ? error.message : JSON.stringify(error);
+    const separator = text.indexOf(':');
+    if (separator <= 0) {
+      return '';
+    }
+    const code = text.substring(0, separator);
+    const detail = text.substring(separator + 1);
+    const isDeviceProof = code === 'DEVICE_PROOF_INVALID' ||
+      (code === 'AUTH_FAILED' && detail.indexOf('设备认证证明') >= 0);
+    if (isDeviceProof) {
+      return '设备二维码未通过当前网关证书认证，请检查二维码所属网关';
+    }
+    return '';
+  }
+
   private setError(code: string, message: string): void {
     this.lastErrorCode = code;
     this.lastError = native.redactDiagnostic(message);
@@ -934,7 +1005,13 @@ export class DeviceManager implements GatewayTransportListener {
 
   private errorMessage(code: string, fallback: string): string {
     if (code === 'AUTH_FAILED') {
+      if (fallback.indexOf('网关已重启') >= 0) {
+        return '网关已重启，安全会话已失效，请重新配对';
+      }
       return '会话已失效，请重新配对';
+    }
+    if (code === 'DEVICE_PROOF_INVALID') {
+      return '设备二维码未通过当前网关证书认证，请检查二维码所属网关';
     }
     if (code === 'DEVICE_OFFLINE') {
       return '目标设备离线';
