@@ -1381,16 +1381,12 @@ struct Index {
     }
     if (id === 'away') {
       scene.name = '离家';
-      scene.actions = [
-        this.sceneAction('light-living-01', 'off'),
-        this.sceneAction('light-living-02', 'off'),
-        this.sceneAction('light-master-01', 'off'),
-        this.sceneAction('light-bedroom-01', 'off'),
-        this.sceneAction('light-bathroom-01', 'off'),
-        this.sceneAction('ac-living-01', 'off'),
-        this.sceneAction('ac-master-01', 'off'),
-        this.sceneAction('door-entry-01', 'off')
-      ];
+      for (let index = 0; index < this.deviceManager.devices.length; index++) {
+        const device = this.deviceManager.devices[index];
+        if (device.type !== DeviceType.ENVIRONMENT) {
+          scene.actions.push(this.sceneAction(device.id, 'off'));
+        }
+      }
       return scene;
     }
     scene.name = '未命名场景';
@@ -1463,7 +1459,7 @@ struct Index {
       return '开启客厅灯光和空调，并锁门';
     }
     if (!scene.customized && scene.id === 'away') {
-      return '关闭灯光和空调，并锁门';
+      return '关闭灯光、电器和窗帘，并锁门';
     }
     let activeCount = 0;
     for (let index = 0; index < scene.actions.length; index++) {
@@ -1543,7 +1539,9 @@ struct Index {
     this.sceneEditorId = scene.id;
     this.sceneEditorName = scene.name;
     this.sceneEditorSearch = '';
-    this.sceneEditorActions = this.editorActionsFor(scene);
+    const editableScene = !scene.customized && scene.id === 'away' ?
+      this.defaultQuickScene(scene.id) : scene;
+    this.sceneEditorActions = this.editorActionsFor(editableScene);
   }
 
   private editorActionsFor(scene: SavedQuickScene): SceneDeviceAction[] {

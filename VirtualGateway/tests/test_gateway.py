@@ -247,13 +247,37 @@ def test_expired_message_is_rejected(service: GatewayService) -> None:
     assert service.devices.get(light["id"])["power"] is False
 
 
-def test_away_scene_returns_per_device_results(
+def test_away_scene_applies_defaults_to_every_controllable_device(
     service: GatewayService,
 ) -> None:
     _, session = pair(service)
-    service.devices.get("light-living-01")["power"] = True
-    service.devices.get("ac-living-01")["power"] = True
-    service.devices.get("door-entry-01")["locked"] = False
+    affected_types = {
+        "light",
+        "airConditioner",
+        "bathHeater",
+        "humidifier",
+        "doorLock",
+        "curtain",
+    }
+    affected_ids: list[str] = []
+    for device in service.devices.devices.values():
+        if device["type"] not in affected_types:
+            continue
+        affected_ids.append(device["id"])
+        if device["type"] in {"light", "airConditioner"}:
+            device["power"] = True
+        elif device["type"] in {"bathHeater", "humidifier"}:
+            device["state"]["power"] = True
+        elif device["type"] == "doorLock":
+            device["locked"] = False
+        elif device["type"] == "curtain":
+            device["state"].update(
+                {
+                    "positionPercent": 100,
+                    "targetPositionPercent": 100,
+                    "movement": "stopped",
+                }
+            )
     envelope = command(
         session,
         device_id="scene-away",
@@ -263,12 +287,26 @@ def test_away_scene_returns_per_device_results(
     )
     result, events = process(service, session, envelope)
     assert result["success"] is True
-    assert len(result["details"]) == 3
+    assert len(result["details"]) == len(affected_ids)
     assert all(item["success"] for item in result["details"])
-    assert len(events) == 3
-    assert service.devices.get("light-living-01")["power"] is False
-    assert service.devices.get("ac-living-01")["power"] is False
+    assert {item["deviceId"] for item in result["details"]} == set(affected_ids)
+    assert len(events) == len(affected_ids)
+    assert all(
+        device["power"] is False
+        for device in service.devices.devices.values()
+        if device["type"] in {"light", "airConditioner"}
+    )
+    assert all(
+        device["state"]["power"] is False
+        for device in service.devices.devices.values()
+        if device["type"] in {"bathHeater", "humidifier"}
+    )
     assert service.devices.get("door-entry-01")["locked"] is True
+    assert all(
+        device["state"]["targetPositionPercent"] == 0
+        for device in service.devices.devices.values()
+        if device["type"] == "curtain"
+    )
 
 
 def test_home_scene_returns_per_device_results(

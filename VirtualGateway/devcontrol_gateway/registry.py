@@ -266,10 +266,18 @@ class DeviceRegistry:
         return self.public_device(device)
 
     def _execute_away(self) -> list[dict[str, object]]:
-        actions = (
-            ("light-living-01", (("setPower", {"power": False}),)),
-            ("ac-living-01", (("setPower", {"power": False}),)),
-            ("door-entry-01", (("lock", {}),)),
+        action_by_type: dict[str, tuple[str, dict[str, object]]] = {
+            "light": ("setPower", {"power": False}),
+            "airConditioner": ("setPower", {"power": False}),
+            "bathHeater": ("setPower", {"power": False}),
+            "humidifier": ("setPower", {"power": False}),
+            "doorLock": ("lock", {}),
+            "curtain": ("close", {}),
+        }
+        actions = tuple(
+            (device["id"], (action_by_type[device["type"]],))
+            for device in self.devices.values()
+            if device["type"] in action_by_type
         )
         return self._execute_scene_actions(actions)
 
