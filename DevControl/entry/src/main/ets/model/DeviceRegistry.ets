@@ -6,6 +6,11 @@ import {
   EnvironmentDevice,
   LightDevice
 } from './DeviceModel';
+import {
+  DeviceControl,
+  DeviceControlKind,
+  GenericDevice
+} from './GenericDeviceModel';
 
 /**
  * A device capability describes the UI and command affordances that a device
@@ -74,7 +79,7 @@ export class DeviceRegistry {
     ]),
     new DeviceCapability(DeviceType.ENVIRONMENT, '环境', '≈', []),
     new DeviceCapability(DeviceType.AIR_CONDITIONER, '空调', '❄', [
-      'setPower', 'setMode', 'setTemperature', 'setFanSpeed', 'setBrand'
+      'setPower', 'setMode', 'setTemperature', 'setFanSpeed', 'setDehumidify', 'setBrand'
     ]),
     new DeviceCapability(DeviceType.DOOR_LOCK, '门锁', '🔒', [
       'lock', 'unlock', 'setAutoLockConfig'
@@ -83,8 +88,6 @@ export class DeviceRegistry {
 
   private static readonly homeFeatures: DeviceFeature[] = [
     new DeviceFeature('lighting', '灯光', '○', [DeviceType.LIGHT]),
-    // Curtain support is reserved for gateways that expose a curtain adapter.
-    new DeviceFeature('curtains', '窗帘', '▥', []),
     new DeviceFeature('environment', '环境', '≈', [
       DeviceType.ENVIRONMENT, DeviceType.AIR_CONDITIONER
     ]),
@@ -106,13 +109,57 @@ export class DeviceRegistry {
     return capability !== null && capability.supports(action);
   }
 
-  static getHomeFeatures(): DeviceFeature[] {
-    return DeviceRegistry.homeFeatures;
+  static supportsDeviceAction(device: DeviceInfo, action: string): boolean {
+    const capability = DeviceRegistry.getCapability(device.type);
+    if (capability !== null) {
+      return capability.supports(action);
+    }
+    const generic = device as GenericDevice;
+    for (let index = 0; index < generic.controls.length; index++) {
+      if (generic.controls[index].action === action) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  static getFeature(featureId: string): DeviceFeature | null {
+  static getHomeFeatures(devices: DeviceInfo[] = []): DeviceFeature[] {
+    const result: DeviceFeature[] = [];
     for (let index = 0; index < DeviceRegistry.homeFeatures.length; index++) {
-      const feature = DeviceRegistry.homeFeatures[index];
+      result.push(DeviceRegistry.homeFeatures[index]);
+    }
+    for (let index = 0; index < devices.length; index++) {
+      if (DeviceRegistry.getCapability(devices[index].type) !== null) {
+        continue;
+      }
+      const category = (devices[index] as GenericDevice).category;
+      let exists = false;
+      for (let featureIndex = 0; featureIndex < result.length; featureIndex++) {
+        if (result[featureIndex].id === category.id) {
+          exists = true;
+          break;
+        }
+      }
+      if (!exists) {
+        result.push(new DeviceFeature(
+          category.id,
+          category.title,
+          category.icon,
+          [],
+          category.homeOnly
+        ));
+      }
+    }
+    return result;
+  }
+
+  static getFeature(
+    featureId: string,
+    devices: DeviceInfo[] = []
+  ): DeviceFeature | null {
+    const features = DeviceRegistry.getHomeFeatures(devices);
+    for (let index = 0; index < features.length; index++) {
+      const feature = features[index];
       if (feature.id === featureId) {
         return feature;
       }
@@ -121,14 +168,19 @@ export class DeviceRegistry {
   }
 
   static getDevicesByFeature(devices: DeviceInfo[], featureId: string): DeviceInfo[] {
-    const feature = DeviceRegistry.getFeature(featureId);
+    const feature = DeviceRegistry.getFeature(featureId, devices);
     if (feature === null) {
       return [];
     }
     const result: DeviceInfo[] = [];
     for (let index = 0; index < devices.length; index++) {
-      if (feature.containsType(devices[index].type)) {
-        result.push(devices[index]);
+      const device = devices[index];
+      let belongs = feature.containsType(device.type);
+      if (DeviceRegistry.getCapability(device.type) === null) {
+        belongs = (device as GenericDevice).category.id === featureId;
+      }
+      if (belongs) {
+        result.push(device);
       }
     }
     return result;
@@ -139,7 +191,13 @@ export class DeviceRegistry {
     for (let index = 0; index < devices.length; index++) {
       const device = devices[index];
       const feature = DeviceRegistry.featureForType(device.type);
-      if (device.roomId === roomId && (feature === null || !feature.homeOnly)) {
+      const genericHomeOnly = DeviceRegistry.getCapability(device.type) === null &&
+        (device as GenericDevice).category.homeOnly;
+      if (
+        device.roomId === roomId &&
+        !genericHomeOnly &&
+        (feature === null || !feature.homeOnly)
+      ) {
         result.push(device);
       }
     }
@@ -196,6 +254,21 @@ export class DeviceRegistry {
       result.summary = '设备离线';
       return result;
     }
+    if (capability === null) {
+      const generic = device as GenericDevice;
+      result.icon = generic.category.icon;
+      let primary: DeviceControl | null = null;
+      for (let index = 0; index < generic.controls.length; index++) {
+        if (generic.controls[index].primary) {
+          primary = generic.controls[index];
+          break;
+        }
+      }
+      result.summary = primary === null ? '\u8bbe\u5907\u5728\u7ebf' :
+        primary.label + ' \u00b7 ' +
+        DeviceRegistry.formatGenericValue(generic, primary);
+      return result;
+    }
     if (device.type === DeviceType.LIGHT) {
       const light = device as LightDevice;
       result.icon = light.state.power ? '●' : '○';
@@ -222,5 +295,29 @@ export class DeviceRegistry {
     result.summary = doorLock.state.jammed ? '锁体异常' :
       (doorLock.state.locked ? '已上锁' : '已解锁');
     return result;
+  }
+
+  private static formatGenericValue(
+    device: GenericDevice,
+    control: DeviceControl
+  ): string {
+    const value = device.state[control.stateKey];
+    if (typeof value === 'boolean') {
+      return value ? '\u5df2\u5f00\u542f' : '\u5df2\u5173\u95ed';
+    }
+    if (typeof value === 'number') {
+      return value.toFixed(0) + control.unit;
+    }
+    if (typeof value === 'string') {
+      if (control.kind === DeviceControlKind.ENUM) {
+        for (let index = 0; index < control.options.length; index++) {
+          if (control.options[index].value === value) {
+            return control.options[index].label;
+          }
+        }
+      }
+      return value + control.unit;
+    }
+    return '--';
   }
 }

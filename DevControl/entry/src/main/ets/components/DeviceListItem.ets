@@ -1,6 +1,8 @@
 import { router } from '@kit.ArkUI';
 import { DeviceInfo } from '../model/DeviceModel';
 import { DeviceRegistry } from '../model/DeviceRegistry';
+import { GenericDevice } from '../model/GenericDeviceModel';
+import { CurtainIcon } from './CurtainIcon';
 
 @Component
 export struct DeviceListItem {
@@ -8,11 +10,20 @@ export struct DeviceListItem {
 
   build() {
     Row() {
-      Text(this.deviceIcon())
-        .fontSize(30)
+      Stack({ alignContent: Alignment.Center }) {
+        if (this.isCurtainDevice()) {
+          CurtainIcon({ iconSize: 30 })
+        } else {
+          Text(this.deviceIcon())
+            .fontSize(30)
+            .width(48)
+            .height(48)
+            .lineHeight(48)
+            .textAlign(TextAlign.Center)
+        }
+      }
         .width(48)
         .height(48)
-        .textAlign(TextAlign.Center)
         .backgroundColor('#EAF5FF')
         .borderRadius(14)
       Column() {
@@ -53,6 +64,11 @@ export struct DeviceListItem {
 
   private deviceIcon(): string {
     return DeviceRegistry.present(this.device).icon;
+  }
+
+  private isCurtainDevice(): boolean {
+    return DeviceRegistry.getCapability(this.device.type) === null &&
+      (this.device as GenericDevice).category.id === 'curtains';
   }
 
   private deviceSummary(): string {

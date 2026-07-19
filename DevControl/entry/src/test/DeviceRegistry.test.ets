@@ -1,6 +1,12 @@
 import { describe, expect, it } from '@ohos/hypium';
 import { DeviceRegistry } from '../main/ets/model/DeviceRegistry';
 import { DeviceType, DoorLockDevice, LightDevice } from '../main/ets/model/DeviceModel';
+import {
+  DeviceCategory,
+  DeviceControl,
+  DeviceControlKind,
+  GenericDevice
+} from '../main/ets/model/GenericDeviceModel';
 
 function makeLight(roomId: string, isOn: boolean): LightDevice {
   const device = new LightDevice();
@@ -19,6 +25,35 @@ function makeDoorLock(roomId: string): DoorLockDevice {
   device.name = '测试门锁';
   device.roomId = roomId;
   device.online = true;
+  return device;
+}
+function makeCurtain(): GenericDevice {
+  const device = new GenericDevice();
+  device.id = 'curtain-living-01';
+  device.name = '测试窗帘';
+  device.roomId = 'living';
+  device.type = 'curtain';
+  device.online = true;
+  device.stateVersion = 1;
+  const category = new DeviceCategory();
+  category.id = 'curtains';
+  category.title = '窗帘';
+  category.icon = '🪟';
+  device.category = category;
+  device.state['positionPercent'] = 30;
+  const control = new DeviceControl();
+  control.id = 'position';
+  control.kind = DeviceControlKind.SLIDER;
+  control.label = '开合度';
+  control.action = 'setPosition';
+  control.stateKey = 'positionPercent';
+  control.payloadKey = 'positionPercent';
+  control.minimum = 0;
+  control.maximum = 100;
+  control.step = 1;
+  control.unit = '%';
+  control.primary = true;
+  device.controls = [control];
   return device;
 }
 
@@ -55,6 +90,21 @@ export default function deviceRegistryTest() {
       expect(DeviceRegistry.getDevicesByFeature([light, doorLock], 'curtains').length)
         .assertEqual(0);
       expect(DeviceRegistry.getRoomDevices([light, doorLock], 'living').length).assertEqual(1);
+    });
+    it('discovers generic categories, actions and presentations', 0, () => {
+      const curtain = makeCurtain();
+      expect(DeviceRegistry.supportsDeviceAction(curtain, 'setPosition')).assertTrue();
+      expect(DeviceRegistry.getDevicesByFeature([curtain], 'curtains').length)
+        .assertEqual(1);
+      expect(DeviceRegistry.getRoomDevices([curtain], 'living').length)
+        .assertEqual(1);
+      expect(DeviceRegistry.present(curtain).summary).assertEqual('开合度 · 30%');
+
+      curtain.category.id = 'shades';
+      curtain.category.title = '遮阳';
+      expect(DeviceRegistry.getHomeFeatures([curtain]).length).assertEqual(5);
+      const feature = DeviceRegistry.getFeature('shades', [curtain]);
+      expect(feature === null ? '' : feature.title).assertEqual('遮阳');
     });
   });
 }

@@ -16,11 +16,19 @@
         "updatedAt"
       ],
       "properties": {
-        "id": { "type": "string", "minLength": 3 },
+        "id": {
+          "type": "string",
+          "minLength": 3,
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"
+        },
         "name": { "type": "string", "minLength": 1 },
-        "roomId": { "type": "string", "minLength": 1 },
+        "roomId": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"
+        },
         "type": {
-          "enum": ["light", "environment", "airConditioner", "doorLock"]
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"
         },
         "online": { "type": "boolean" },
         "stateVersion": { "type": "integer", "minimum": 0 },
@@ -157,12 +165,149 @@
         }
       ]
     },
+    "deviceCategory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "icon", "homeOnly"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "icon": { "type": "string", "minLength": 1, "maxLength": 8 },
+        "homeOnly": { "type": "boolean" }
+      }
+    },
+    "controlOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "label"],
+      "properties": {
+        "value": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 32 }
+      }
+    },
+    "deviceControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "label", "action"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"
+        },
+        "kind": { "enum": ["button", "toggle", "slider", "enum"] },
+        "label": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "action": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"
+        },
+        "stateKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"
+        },
+        "payloadKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"
+        },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 },
+        "unit": { "type": "string", "maxLength": 16 },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/controlOption" }
+        },
+        "primary": { "type": "boolean" },
+        "requiresConfirmation": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "toggle" } },
+            "required": ["kind"]
+          },
+          "then": { "required": ["stateKey", "payloadKey"] }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "slider" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": [
+              "stateKey",
+              "payloadKey",
+              "minimum",
+              "maximum",
+              "step"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "enum" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["stateKey", "payloadKey", "options"]
+          }
+        }
+      ]
+    },
+    "genericDevice": {
+      "allOf": [
+        { "$ref": "#/$defs/baseDevice" },
+        {
+          "type": "object",
+          "required": ["category", "state", "controls"],
+          "properties": {
+            "type": {
+              "not": {
+                "enum": [
+                  "light",
+                  "environment",
+                  "airConditioner",
+                  "doorLock"
+                ]
+              }
+            },
+            "category": { "$ref": "#/$defs/deviceCategory" },
+            "state": {
+              "type": "object",
+              "maxProperties": 32,
+              "propertyNames": {
+                "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"
+              },
+              "additionalProperties": {
+                "oneOf": [
+                  { "type": "string", "maxLength": 256 },
+                  { "type": "number" },
+                  { "type": "boolean" },
+                  { "type": "null" }
+                ]
+              }
+            },
+            "controls": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": { "$ref": "#/$defs/deviceControl" }
+            }
+          }
+        }
+      ]
+    },
     "device": {
       "oneOf": [
         { "$ref": "#/$defs/lightDevice" },
         { "$ref": "#/$defs/environmentDevice" },
         { "$ref": "#/$defs/airConditionerDevice" },
-        { "$ref": "#/$defs/doorLockDevice" }
+        { "$ref": "#/$defs/doorLockDevice" },
+        { "$ref": "#/$defs/genericDevice" }
       ]
     },
     "secureCommand": {

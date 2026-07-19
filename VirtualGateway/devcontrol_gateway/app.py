@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Annotated, Any
 
 from fastapi import (
@@ -13,8 +15,10 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import ValidationError
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .config import GatewayConfig
 from .errors import AUTH_FAILED, GatewayError
@@ -27,6 +31,197 @@ from .models import (
 )
 from .security import ClientSession, now_ms
 from .service import GatewayService
+
+
+class RequestBodyLimitMiddleware:
+    """Bound API bodies before FastAPI performs JSON parsing or validation."""
+
+    def __init__(self, app: ASGIApp, max_body_size: int) -> None:
+        self.app = app
+        self.max_body_size = max_body_size
+
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        if (
+            scope["type"] != "http"
+            or not scope["path"].startswith("/api/")
+            or scope["method"] not in {"POST", "PUT", "PATCH"}
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        content_length = next(
+            (
+                value
+                for name, value in scope["headers"]
+                if name.lower() == b"content-length"
+            ),
+            None,
+        )
+        if content_length is not None:
+            try:
+                declared_size = int(content_length)
+            except ValueError:
+                declared_size = self.max_body_size + 1
+            if declared_size > self.max_body_size:
+                await self._send_too_large(scope, receive, send)
+                return
+
+        received_size = 0
+        chunks: list[bytes] = []
+        more_body = True
+        while more_body:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            if message["type"] != "http.request":
+                continue
+            chunk = message.get("body", b"")
+            received_size += len(chunk)
+            if received_size > self.max_body_size:
+                await self._send_too_large(scope, receive, send)
+                return
+            chunks.append(chunk)
+            more_body = bool(message.get("more_body", False))
+
+        consumed = False
+
+        async def limited_receive() -> Message:
+            nonlocal consumed
+            if not consumed:
+                consumed = True
+                return {
+                    "type": "http.request",
+                    "body": b"".join(chunks),
+                    "more_body": False,
+                }
+            return await receive()
+
+        await self.app(scope, limited_receive, send)
+
+    @staticmethod
+    async def _send_too_large(
+        scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        response = JSONResponse(
+            status_code=413,
+            content={
+                "error": {
+                    "code": "INVALID_COMMAND",
+                    "message": "请求正文超过安全限制",
+                }
+            },
+        )
+        await response(scope, receive, send)
+
+
+class TransportSecurityHeadersMiddleware:
+    """Attach transport headers without buffering request bodies."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        async def send_with_security_headers(message: Message) -> None:
+            if (
+                scope["type"] == "http"
+                and scope["path"].startswith("/api/")
+                and message["type"] == "http.response.start"
+            ):
+                headers = MutableHeaders(scope=message)
+                headers["Cache-Control"] = "no-store"
+                headers["Strict-Transport-Security"] = (
+                    "max-age=31536000; includeSubDomains"
+                )
+                headers["X-Content-Type-Options"] = "nosniff"
+                headers["Referrer-Policy"] = "no-referrer"
+            await send(message)
+
+        await self.app(scope, receive, send_with_security_headers)
+
+
+def _transport_capabilities(config: GatewayConfig) -> list[dict[str, object]]:
+    return [
+        {
+            "id": "https-rest",
+            "enabled": True,
+            "mode": "request-response",
+            "security": "TLS 1.2+, Bearer, AES-256-GCM commands",
+        },
+        {
+            "id": "wss",
+            "enabled": True,
+            "mode": "bidirectional-events",
+            "security": "TLS 1.2+, Bearer, AES-256-GCM commands",
+        },
+        {
+            "id": "https-sse",
+            "enabled": True,
+            "mode": "server-events",
+            "security": "TLS 1.2+, Bearer",
+        },
+        {
+            "id": "mqtt5-tls",
+            "available": True,
+            "enabled": config.mqtt_enabled,
+            "mode": "publish-subscribe",
+            "security": "TLS 1.2+, broker authentication, AES-256-GCM commands",
+        },
+    ]
+
+
+def _encode_sse(event: dict[str, Any]) -> bytes:
+    event_type = str(event.get("type", "message"))
+    payload = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+    return f"event: {event_type}\ndata: {payload}\n\n".encode("utf-8")
+
+
+async def _sse_event_stream(
+    gateway: GatewayService,
+    credential: str,
+    disconnected: Callable[[], Awaitable[bool]],
+) -> AsyncIterator[bytes]:
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=64)
+
+    async def sink(event: dict[str, Any]) -> None:
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        queue.put_nowait(event)
+
+    gateway.add_sink(sink)
+    try:
+        yield _encode_sse(
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "type": "heartbeat",
+                "timestamp": now_ms(),
+            }
+        )
+        while not await disconnected():
+            try:
+                session = gateway.sessions.authenticate(credential)
+            except GatewayError:
+                return
+            timeout = min(15.0, gateway.sessions.remaining_seconds(session))
+            if timeout <= 0:
+                return
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=timeout)
+            except TimeoutError:
+                event = {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "type": "heartbeat",
+                    "timestamp": now_ms(),
+                }
+            yield _encode_sse(event)
+    finally:
+        gateway.remove_sink(sink)
 
 
 def _extract_bearer(authorization: str | None) -> str:
@@ -91,6 +286,7 @@ def create_app(
             "protocolVersion": PROTOCOL_VERSION,
             "gatewayVersion": "1.1.0",
             "serverTime": now_ms(),
+            "transports": _transport_capabilities(effective_config),
         }
 
     @app.post("/api/v1/pair")
@@ -143,6 +339,33 @@ def create_app(
             "deviceId": deviceId,
             "items": items,
         }
+
+    @app.post("/api/v1/commands")
+    async def commands(
+        body: SecureCommandEnvelope,
+        session: ClientSession = Depends(require_session),
+    ) -> dict[str, object]:
+        result, state_events = await gateway.process_command(session, body)
+        for event in state_events:
+            await gateway.broadcast(event)
+        return result
+
+    @app.get("/api/v1/events")
+    async def server_sent_events(
+        request: Request,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> StreamingResponse:
+        credential = _extract_bearer(authorization)
+        gateway.sessions.authenticate(credential)
+        return StreamingResponse(
+            _sse_event_stream(gateway, credential, request.is_disconnected),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
     @app.websocket("/ws/v1/events")
     async def events(websocket: WebSocket) -> None:
@@ -218,6 +441,14 @@ def create_app(
             pass
         finally:
             gateway.remove_sink(sink)
+
+    # Register after the header middleware so this pure ASGI guard is outermost
+    # and observes body chunks before FastAPI or BaseHTTPMiddleware buffers them.
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        max_body_size=effective_config.max_transport_message_bytes,
+    )
+    app.add_middleware(TransportSecurityHeadersMiddleware)
 
     return app
 

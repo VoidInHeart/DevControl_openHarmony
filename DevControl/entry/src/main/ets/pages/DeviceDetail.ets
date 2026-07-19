@@ -2,6 +2,7 @@ import { router } from '@kit.ArkUI';
 import { DoorLockTab } from '../components/DoorLockTab';
 import { LightingTab } from '../components/LightingTab';
 import { TemperatureTab } from '../components/TemperatureTab';
+import { GenericDeviceControl } from '../components/GenericDeviceControl';
 import { DeviceInfo, DeviceType } from '../model/DeviceModel';
 import { DeviceApplication } from '../model/DeviceApplication';
 import { DeviceManager } from '../model/DeviceManager';
@@ -33,6 +34,8 @@ struct DeviceDetail {
         TemperatureTab({ deviceId: this.deviceId, showTitle: false })
       } else if ((this.currentDevice() as DeviceInfo).type === DeviceType.DOOR_LOCK) {
         DoorLockTab({ deviceId: this.deviceId, showTitle: false })
+      } else {
+        GenericDeviceControl({ deviceId: this.deviceId })
       }
     }
     .width('100%')

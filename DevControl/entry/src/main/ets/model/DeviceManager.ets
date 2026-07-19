@@ -26,6 +26,11 @@ import { GatewaySessionStore } from '../service/GatewaySessionStore';
 import { PairingPreferenceStore } from '../service/PairingPreferenceStore';
 import { WssGatewayTransport } from '../service/WssGatewayTransport';
 import { DeviceRegistry } from './DeviceRegistry';
+import {
+  DeviceControl,
+  DeviceControlKind,
+  GenericDevice
+} from './GenericDeviceModel';
 
 @Observed
 export class DeviceManager implements GatewayTransportListener {
@@ -401,14 +406,14 @@ export class DeviceManager implements GatewayTransportListener {
   }
 
   async setLightPower(device: LightDevice, power: boolean): Promise<void> {
-    const payload = new CommandPayload();
-    payload.power = power;
+    const payload: CommandPayload = {};
+    payload['power'] = power;
     await this.submit(device, 'setPower', payload);
   }
 
   async setLightBrightness(device: LightDevice, brightness: number): Promise<void> {
-    const payload = new CommandPayload();
-    payload.brightness = Math.round(brightness);
+    const payload: CommandPayload = {};
+    payload['brightness'] = Math.round(brightness);
     await this.submit(device, 'setBrightness', payload);
   }
 
@@ -418,45 +423,51 @@ export class DeviceManager implements GatewayTransportListener {
     threshold: number,
     delaySeconds: number
   ): Promise<void> {
-    const payload = new CommandPayload();
-    payload.enabled = enabled;
-    payload.illuminanceThresholdLux = Math.round(threshold);
-    payload.noPresenceDelaySeconds = Math.round(delaySeconds);
+    const payload: CommandPayload = {};
+    payload['enabled'] = enabled;
+    payload['illuminanceThresholdLux'] = Math.round(threshold);
+    payload['noPresenceDelaySeconds'] = Math.round(delaySeconds);
     await this.submit(device, 'setAutomationConfig', payload);
   }
 
   async setAcPower(device: AirConditionerDevice, power: boolean): Promise<void> {
-    const payload = new CommandPayload();
-    payload.power = power;
+    const payload: CommandPayload = {};
+    payload['power'] = power;
     await this.submit(device, 'setPower', payload);
   }
 
   async setAcMode(device: AirConditionerDevice, mode: string): Promise<void> {
-    const payload = new CommandPayload();
-    payload.mode = mode;
+    const payload: CommandPayload = {};
+    payload['mode'] = mode;
     await this.submit(device, 'setMode', payload);
   }
 
+  async setAcDehumidify(device: AirConditionerDevice, enabled: boolean): Promise<void> {
+    const payload: CommandPayload = {};
+    payload['enabled'] = enabled;
+    await this.submit(device, 'setDehumidify', payload);
+  }
+
   async setAcTemperature(device: AirConditionerDevice, temperature: number): Promise<void> {
-    const payload = new CommandPayload();
-    payload.temperatureCelsius = Math.round(temperature);
+    const payload: CommandPayload = {};
+    payload['temperatureCelsius'] = Math.round(temperature);
     await this.submit(device, 'setTemperature', payload);
   }
 
   async setAcFanSpeed(device: AirConditionerDevice, fanSpeed: string): Promise<void> {
-    const payload = new CommandPayload();
-    payload.fanSpeed = fanSpeed;
+    const payload: CommandPayload = {};
+    payload['fanSpeed'] = fanSpeed;
     await this.submit(device, 'setFanSpeed', payload);
   }
 
   async setAcBrand(device: AirConditionerDevice, brand: string): Promise<void> {
-    const payload = new CommandPayload();
-    payload.brand = brand;
+    const payload: CommandPayload = {};
+    payload['brand'] = brand;
     await this.submit(device, 'setBrand', payload);
   }
 
   async setDoorLocked(device: DoorLockDevice, locked: boolean): Promise<void> {
-    await this.submit(device, locked ? 'lock' : 'unlock', new CommandPayload());
+    await this.submit(device, locked ? 'lock' : 'unlock', {});
   }
 
   async setDoorAutoLock(
@@ -464,18 +475,26 @@ export class DeviceManager implements GatewayTransportListener {
     enabled: boolean,
     delaySeconds: number
   ): Promise<void> {
-    const payload = new CommandPayload();
-    payload.enabled = enabled;
-    payload.delaySeconds = Math.round(delaySeconds);
+    const payload: CommandPayload = {};
+    payload['enabled'] = enabled;
+    payload['delaySeconds'] = Math.round(delaySeconds);
     await this.submit(device, 'setAutoLockConfig', payload);
   }
 
+  async executeDeviceAction(
+    device: DeviceInfo,
+    action: string,
+    payload: CommandPayload
+  ): Promise<void> {
+    await this.submit(device, action, payload);
+  }
+
   async executeAwayScene(): Promise<void> {
-    await this.submitRaw('scene-away', 'executeAway', null, new CommandPayload());
+    await this.submitRaw('scene-away', 'executeAway', null, {});
   }
 
   async executeHomeScene(): Promise<void> {
-    await this.submitRaw('scene-home', 'executeHome', null, new CommandPayload());
+    await this.submitRaw('scene-home', 'executeHome', null, {});
   }
 
   async executeConfiguredScene(actions: SceneDeviceAction[]): Promise<void> {
@@ -495,7 +514,11 @@ export class DeviceManager implements GatewayTransportListener {
       } else if (device.type === DeviceType.AIR_CONDITIONER) {
         await this.setAcPower(device as AirConditionerDevice, power);
       } else if (device.type === DeviceType.DOOR_LOCK) {
-        await this.setDoorLocked(device as DoorLockDevice, !power);
+        if (!power) {
+          await this.setDoorLocked(device as DoorLockDevice, true);
+        }
+      } else {
+        await this.executeGenericSceneOperation(device as GenericDevice, power);
       }
     }
   }
@@ -567,12 +590,50 @@ export class DeviceManager implements GatewayTransportListener {
     }
   }
 
+  private async executeGenericSceneOperation(
+    device: GenericDevice,
+    power: boolean
+  ): Promise<void> {
+    let toggle: DeviceControl | null = null;
+    let namedButton: DeviceControl | null = null;
+    let slider: DeviceControl | null = null;
+    const buttonAction = power ? 'open' : 'close';
+    for (let index = 0; index < device.controls.length; index++) {
+      const control = device.controls[index];
+      if (control.kind === DeviceControlKind.TOGGLE && (toggle === null || control.primary)) {
+        toggle = control;
+      } else if (
+        control.kind === DeviceControlKind.BUTTON &&
+        control.action === buttonAction
+      ) {
+        namedButton = control;
+      } else if (control.kind === DeviceControlKind.SLIDER && (slider === null || control.primary)) {
+        slider = control;
+      }
+    }
+    if (toggle !== null) {
+      const payload: CommandPayload = {};
+      payload[toggle.payloadKey] = power;
+      await this.executeDeviceAction(device, toggle.action, payload);
+      return;
+    }
+    if (namedButton !== null) {
+      await this.executeDeviceAction(device, namedButton.action, {});
+      return;
+    }
+    if (slider !== null) {
+      const payload: CommandPayload = {};
+      payload[slider.payloadKey] = power ? slider.maximum : slider.minimum;
+      await this.executeDeviceAction(device, slider.action, payload);
+    }
+  }
+
   private async submit(
     device: DeviceInfo,
     action: string,
     payload: CommandPayload
   ): Promise<void> {
-    if (!DeviceRegistry.supportsAction(device.type, action)) {
+    if (!DeviceRegistry.supportsDeviceAction(device, action)) {
       this.setError('INVALID_COMMAND', '该设备不支持此控制操作');
       return;
     }

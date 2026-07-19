@@ -44,6 +44,7 @@ export class WssGatewayTransport implements GatewayTransport {
   private lastMessageAt: number = 0;
 
   configure(session: GatewaySession): void {
+    this.requireSecureAddress(session.gatewayAddress);
     this.session = session;
   }
 
@@ -52,11 +53,13 @@ export class WssGatewayTransport implements GatewayTransport {
   }
 
   async checkHealth(address: string): Promise<boolean> {
+    this.requireSecureAddress(address);
     const response = await this.request(address + '/api/v1/health', http.RequestMethod.GET, null, '');
     return response['status'] === 'ok' && response['protocolVersion'] === '1.0';
   }
 
   async pair(address: string, pairingCode: string, clientId: string): Promise<GatewaySession> {
+    this.requireSecureAddress(address);
     const body: Record<string, Object> = {
       'protocolVersion': '1.0',
       'pairingCode': pairingCode,
@@ -190,7 +193,8 @@ export class WssGatewayTransport implements GatewayTransport {
       this.handleUnexpectedDisconnect(this.describeError(error, 'WebSocket 连接异常'));
       this.closeSocketOnly();
     });
-    const wsAddress = session.gatewayAddress.replace('https://', 'wss://') + '/ws/v1/events';
+    this.requireSecureAddress(session.gatewayAddress);
+    const wsAddress = 'wss://' + session.gatewayAddress.substring('https://'.length) + '/ws/v1/events';
     const options: webSocket.WebSocketRequestOptions = {
       header: {
         'Authorization': 'Bearer ' + session.credential
@@ -286,6 +290,9 @@ export class WssGatewayTransport implements GatewayTransport {
     body: Record<string, Object> | null,
     credential: string
   ): Promise<Record<string, Object>> {
+    if (!url.startsWith('https://')) {
+      throw new Error('INVALID_COMMAND:仅允许 HTTPS/WSS 安全传输');
+    }
     const request = http.createHttp();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
@@ -333,6 +340,12 @@ export class WssGatewayTransport implements GatewayTransport {
         this.closeSocketOnly();
       }
     }, 5000) as number;
+  }
+
+  private requireSecureAddress(address: string): void {
+    if (!address.startsWith('https://') || address.length <= 'https://'.length) {
+      throw new Error('INVALID_COMMAND:网关地址必须使用 HTTPS');
+    }
   }
 
   private stopHeartbeatMonitor(): void {

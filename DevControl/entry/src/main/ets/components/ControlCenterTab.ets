@@ -1,6 +1,8 @@
 import { router } from '@kit.ArkUI';
 import {
+  ACMode,
   AirConditionerDevice,
+  CommandPayload,
   DeviceInfo,
   DeviceType,
   DoorLockDevice,
@@ -9,6 +11,8 @@ import {
 } from '../model/DeviceModel';
 import { DeviceFeature, DeviceRegistry } from '../model/DeviceRegistry';
 import { DeviceManager } from '../model/DeviceManager';
+import { GenericDevice } from '../model/GenericDeviceModel';
+import { CurtainIcon } from './CurtainIcon';
 import { LockIcon } from './LockIcon';
 
 @Component
@@ -437,22 +441,114 @@ export struct ControlCenterTab {
           .width('100%')
           .margin({ top: 8 })
       }, (device: EnvironmentDevice) => device.id + ':' + device.stateVersion.toString())
-      Column() {
-        Text('加湿器控制（预留）')
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#14263A')
-        Text('接入加湿器模块后，这里将自动显示开关、目标湿度和模式控制。')
-          .fontSize(13)
-          .fontColor('#748294')
+      this.HumidityDeviceControls()
+    }
+    .width('100%')
+  }
+
+  @Builder
+  HumidityDeviceControls() {
+    Column() {
+      Text('除湿空调')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+        .width('100%')
+        .margin({ top: 22, bottom: 12 })
+      if (this.scopedAirConditioners().length === 0) {
+        this.SheetEmptyState('当前范围暂无可用空调')
+      } else {
+        ForEach(this.scopedAirConditioners(), (device: AirConditionerDevice) => {
+          Row() {
+            Text('❄')
+              .fontSize(23)
+              .fontColor('#1769C2')
+              .width(46)
+              .height(46)
+              .lineHeight(46)
+              .textAlign(TextAlign.Center)
+              .backgroundColor('#EAF4FF')
+              .borderRadius(15)
+            Column() {
+              Text(device.name)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text(this.isDehumidifying(device) ? '除湿中' : '关闭')
+                .fontSize(12)
+                .fontColor('#748294')
+                .margin({ top: 4 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            Toggle({ type: ToggleType.Switch, isOn: this.isDehumidifying(device) })
+              .enabled(this.canControlDevice(device))
+              .opacity(this.canControlDevice(device) ? 1 : 0.45)
+              .selectedColor('#1769C2')
+              .onChange((isOn: boolean) => {
+                this.deviceManager.setAcDehumidify(device, isOn);
+              })
+          }
           .width('100%')
-          .margin({ top: 6 })
+          .padding(14)
+          .borderRadius(20)
+          .backgroundColor('#F7FBFF')
+          .margin({ bottom: 10 })
+          .alignItems(VerticalAlign.Center)
+        }, (device: AirConditionerDevice) => device.id + ':' + device.stateVersion.toString())
       }
-      .width('100%')
-      .padding(18)
-      .borderRadius(20)
-      .backgroundColor('#EEF9F4')
-      .margin({ top: 22 })
+
+      Text('加湿器')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+        .width('100%')
+        .margin({ top: 12, bottom: 12 })
+      if (this.scopedHumidifiers().length === 0) {
+        this.SheetEmptyState('当前范围暂无可用加湿器')
+      } else {
+        ForEach(this.scopedHumidifiers(), (device: GenericDevice) => {
+          Row() {
+            Text('≈')
+              .fontSize(28)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#0F8F66')
+              .width(46)
+              .height(46)
+              .lineHeight(43)
+              .textAlign(TextAlign.Center)
+              .backgroundColor('#E8F8F3')
+              .borderRadius(15)
+            Column() {
+              Text(device.name)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text('目标湿度 ' + this.humidifierTarget(device).toFixed(0) + '%')
+                .fontSize(12)
+                .fontColor('#748294')
+                .margin({ top: 4 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            Toggle({ type: ToggleType.Switch, isOn: this.genericPower(device) })
+              .enabled(this.canControlDevice(device))
+              .opacity(this.canControlDevice(device) ? 1 : 0.45)
+              .selectedColor('#0F8F66')
+              .onChange((isOn: boolean) => {
+                this.setGenericPower(device, isOn);
+              })
+          }
+          .width('100%')
+          .padding(14)
+          .borderRadius(20)
+          .backgroundColor('#F7FBFF')
+          .margin({ bottom: 10 })
+          .alignItems(VerticalAlign.Center)
+        }, (device: GenericDevice) => device.id + ':' + device.stateVersion.toString())
+      }
     }
     .width('100%')
   }
@@ -610,15 +706,12 @@ export struct ControlCenterTab {
   FeatureSection() {
     Column() {
       this.SectionTitle('功能分类')
-      Row() {
-        ForEach(DeviceRegistry.getHomeFeatures(), (feature: DeviceFeature) => {
-          if (feature.id !== 'curtains') {
-            this.FeatureCard(feature)
-          }
+      Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
+        ForEach(DeviceRegistry.getHomeFeatures(this.deviceManager.devices), (feature: DeviceFeature) => {
+          this.FeatureCard(feature)
         }, (feature: DeviceFeature) => feature.id)
       }
       .width('100%')
-      .justifyContent(FlexAlign.SpaceBetween)
     }
     .width('100%')
     .margin({ bottom: 6 })
@@ -628,7 +721,7 @@ export struct ControlCenterTab {
   @Builder
   FeatureCard(feature: DeviceFeature) {
     Column() {
-      Text(this.featureTitle(feature.id))
+      Text(feature.title)
         .fontSize(15)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14263A')
@@ -645,8 +738,10 @@ export struct ControlCenterTab {
         Stack({ alignContent: Alignment.Center }) {
           if (feature.id === 'locks') {
             LockIcon({ locked: true, iconSize: 26 })
+          } else if (feature.id === 'curtains') {
+            CurtainIcon({ iconSize: 32 })
           } else {
-            Text(this.featureIcon(feature.id))
+            Text(feature.icon)
               .fontSize(34)
               .width(54)
               .height(54)
@@ -736,6 +831,8 @@ export struct ControlCenterTab {
     Stack({ alignContent: Alignment.Center }) {
       if (device.type === DeviceType.DOOR_LOCK) {
         LockIcon({ locked: (device as DoorLockDevice).state.locked, iconSize: badgeSize - 20 })
+      } else if (this.isCurtainDevice(device)) {
+        CurtainIcon({ iconSize: badgeSize - 18 })
       } else {
         Text(this.deviceIcon(device))
           .fontSize(badgeSize - 27)
@@ -813,6 +910,37 @@ export struct ControlCenterTab {
       }
     }
     return result;
+  }
+
+  private scopedHumidifiers(): GenericDevice[] {
+    const result: GenericDevice[] = [];
+    const devices = this.scopedDevices();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].type === 'humidifier') {
+        result.push(devices[index] as GenericDevice);
+      }
+    }
+    return result;
+  }
+
+  private isDehumidifying(device: AirConditionerDevice): boolean {
+    return device.state.power && device.state.mode === ACMode.DRY;
+  }
+
+  private genericPower(device: GenericDevice): boolean {
+    const value = device.state['power'];
+    return typeof value === 'boolean' && value;
+  }
+
+  private humidifierTarget(device: GenericDevice): number {
+    const value = device.state['targetHumidityPercent'];
+    return typeof value === 'number' ? value : 55;
+  }
+
+  private setGenericPower(device: GenericDevice, power: boolean): void {
+    const payload: CommandPayload = {};
+    payload['power'] = power;
+    this.deviceManager.executeDeviceAction(device, 'setPower', payload);
   }
 
   private activeLights(): LightDevice[] {
@@ -921,32 +1049,6 @@ export struct ControlCenterTab {
     return roomId;
   }
 
-  private featureTitle(featureId: string): string {
-    if (featureId === 'lighting') {
-      return '灯光';
-    }
-    if (featureId === 'environment') {
-      return '环境';
-    }
-    if (featureId === 'locks') {
-      return '门锁';
-    }
-    return featureId;
-  }
-
-  private featureIcon(featureId: string): string {
-    if (featureId === 'lighting') {
-      return '○';
-    }
-    if (featureId === 'environment') {
-      return '≈';
-    }
-    if (featureId === 'locks') {
-      return '🔒';
-    }
-    return '·';
-  }
-
   private featureTint(featureId: string): string {
     if (featureId === 'lighting') {
       return '#FFF4D8';
@@ -956,6 +1058,9 @@ export struct ControlCenterTab {
     }
     if (featureId === 'locks') {
       return '#EEF1FF';
+    }
+    if (featureId === 'curtains') {
+      return '#EAF4FF';
     }
     return '#F2F5F9';
   }
@@ -968,7 +1073,10 @@ export struct ControlCenterTab {
     if (feature.id === 'locks') {
       return devices.length.toString() + ' 把门锁 · 家庭安全入口';
     }
-    return devices.length.toString() + ' 台设备 · 温湿度与空调';
+    if (feature.id === 'environment') {
+      return devices.length.toString() + ' 台设备 · 温湿度与空调';
+    }
+    return devices.length.toString() + ' 台设备 · ' + feature.title;
   }
 
   private deviceIcon(device: DeviceInfo): string {
@@ -980,6 +1088,12 @@ export struct ControlCenterTab {
     }
     if (device.type === DeviceType.AIR_CONDITIONER) {
       return '❄';
+    }
+    if (this.isCurtainDevice(device)) {
+      return '';
+    }
+    if (DeviceRegistry.getCapability(device.type) === null) {
+      return (device as GenericDevice).category.icon;
     }
     const doorLock = device as DoorLockDevice;
     return doorLock.state.locked ? '🔒' : '🔓';
@@ -995,7 +1109,19 @@ export struct ControlCenterTab {
     if (device.type === DeviceType.AIR_CONDITIONER) {
       return '#EAF4FF';
     }
+    if (this.isCurtainDevice(device)) {
+      return '#EAF4FF';
+    }
+    if (DeviceRegistry.getCapability(device.type) === null) {
+      return (device as GenericDevice).category.id === 'environment' ?
+        '#E8F8F3' : '#F2F5F9';
+    }
     return '#EEF1FF';
+  }
+
+  private isCurtainDevice(device: DeviceInfo): boolean {
+    return DeviceRegistry.getCapability(device.type) === null &&
+      (device as GenericDevice).category.id === 'curtains';
   }
 
   private deviceSummary(device: DeviceInfo): string {
@@ -1016,6 +1142,9 @@ export struct ControlCenterTab {
       return airConditioner.state.power ?
         this.modeLabel(airConditioner.state.mode) + ' · ' +
           airConditioner.state.targetTemperatureCelsius.toFixed(0) + '°C' : '关闭';
+    }
+    if (DeviceRegistry.getCapability(device.type) === null) {
+      return DeviceRegistry.present(device).summary;
     }
     const doorLock = device as DoorLockDevice;
     if (doorLock.state.jammed) {

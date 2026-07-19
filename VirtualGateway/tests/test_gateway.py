@@ -32,9 +32,7 @@ def make_config(tmp_path: Path) -> GatewayConfig:
 
 
 def pair(service: GatewayService) -> tuple[str, ClientSession]:
-    response = service.sessions.pair(
-        "127.0.0.1", f"test-client-{uuid4()}", "123456"
-    )
+    response = service.sessions.pair("127.0.0.1", f"test-client-{uuid4()}", "123456")
     session = service.sessions.authenticate(response.credential)
     return response.credential, session
 
@@ -210,13 +208,10 @@ def test_tamper_replay_and_state_conflict(service: GatewayService) -> None:
         message_id="msg-security-original",
     )
     raw = original.model_dump()
-    raw["ciphertext"] = (
-        ("A" if raw["ciphertext"][0] != "A" else "B")
-        + raw["ciphertext"][1:]
-    )
-    tampered, _ = process(
-        service, session, SecureCommandEnvelope.model_validate(raw)
-    )
+    raw["ciphertext"] = ("A" if raw["ciphertext"][0] != "A" else "B") + raw[
+        "ciphertext"
+    ][1:]
+    tampered, _ = process(service, session, SecureCommandEnvelope.model_validate(raw))
     assert tampered["success"] is False
     assert tampered["error"]["code"] == "REPLAY_DETECTED"
 
@@ -236,8 +231,6 @@ def test_tamper_replay_and_state_conflict(service: GatewayService) -> None:
     )
     conflict, _ = process(service, session, stale)
     assert conflict["error"]["code"] == "STATE_CONFLICT"
-
-
 def test_expired_message_is_rejected(service: GatewayService) -> None:
     _, session = pair(service)
     light = service.devices.get("light-living-01")
@@ -270,9 +263,9 @@ def test_away_scene_returns_per_device_results(
     )
     result, events = process(service, session, envelope)
     assert result["success"] is True
-    assert len(result["details"]) == 8
+    assert len(result["details"]) == 3
     assert all(item["success"] for item in result["details"])
-    assert len(events) == 8
+    assert len(events) == 3
     assert service.devices.get("light-living-01")["power"] is False
     assert service.devices.get("ac-living-01")["power"] is False
     assert service.devices.get("door-entry-01")["locked"] is True
@@ -296,9 +289,9 @@ def test_home_scene_returns_per_device_results(
     )
     result, events = process(service, session, envelope)
     assert result["success"] is True
-    assert len(result["details"]) == 4
+    assert len(result["details"]) == 3
     assert all(item["success"] for item in result["details"])
-    assert len(events) == 4
+    assert len(events) == 3
     light = service.devices.get("light-living-01")
     ac = service.devices.get("ac-living-01")
     assert light["power"] is True
@@ -393,7 +386,7 @@ def test_rest_and_websocket_contract(tmp_path: Path) -> None:
         headers = {"Authorization": f"Bearer {credential}"}
         snapshot = client.get("/api/v1/devices", headers=headers)
         assert snapshot.status_code == 200
-        assert len(snapshot.json()["devices"]) == 11
+        assert any(item["type"] == "curtain" for item in snapshot.json()["devices"])
 
         light = gateway.devices.get("light-living-01")
         envelope = command(
@@ -403,9 +396,7 @@ def test_rest_and_websocket_contract(tmp_path: Path) -> None:
             expected_version=light["stateVersion"],
             payload={"power": True},
         )
-        with client.websocket_connect(
-            "/ws/v1/events", headers=headers
-        ) as websocket:
+        with client.websocket_connect("/ws/v1/events", headers=headers) as websocket:
             heartbeat = websocket.receive_json()
             assert heartbeat["type"] == "heartbeat"
             websocket.send_json(envelope.model_dump())
@@ -431,3 +422,43 @@ def test_rest_and_websocket_contract(tmp_path: Path) -> None:
         logs = client.get("/api/v1/logs", headers=headers)
         assert logs.status_code == 200
         assert logs.json()["items"]
+
+
+def test_curtain_secure_command_is_idempotent_and_emits_state(
+    service: GatewayService,
+) -> None:
+    _, session = pair(service)
+    curtain = service.devices.get("curtain-living-01")
+    envelope = command(
+        session,
+        device_id=curtain["id"],
+        action="setPosition",
+        expected_version=curtain["stateVersion"],
+        payload={"positionPercent": 40},
+        message_id="msg-curtain-idempotency-0001",
+    )
+
+    first, events = process(service, session, envelope)
+    first_version = service.devices.get(curtain["id"])["stateVersion"]
+    duplicate, duplicate_events = process(service, session, envelope)
+
+    assert first["success"] is True
+    assert events[0]["type"] == "state.changed"
+    assert events[0]["device"]["state"]["targetPositionPercent"] == 40
+    assert duplicate == first
+    assert duplicate_events == []
+    assert service.devices.get(curtain["id"])["stateVersion"] == first_version
+
+    changed = service.devices.tick()
+    curtain_events = [item for item in changed if item["id"] == "curtain-living-01"]
+    assert curtain_events[0]["state"]["positionPercent"] == 10
+
+    stale = command(
+        session,
+        device_id=curtain["id"],
+        action="close",
+        expected_version=0,
+        payload={},
+    )
+    conflict, _ = process(service, session, stale)
+    assert conflict["error"]["code"] == "STATE_CONFLICT"

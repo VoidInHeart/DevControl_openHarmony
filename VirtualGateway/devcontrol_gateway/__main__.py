@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import ssl
+from typing import Any
 
 import uvicorn
 
@@ -10,8 +12,32 @@ from .config import GatewayConfig
 from .service import GatewayService
 
 
+def _business_server_config(app: Any, config: GatewayConfig) -> uvicorn.Config:
+    server_config = uvicorn.Config(
+        app,
+        host=config.host,
+        port=config.port,
+        ssl_certfile=str(config.tls_cert),
+        ssl_keyfile=str(config.tls_key),
+        ssl_version=ssl.PROTOCOL_TLS_SERVER,
+        ssl_ciphers="ECDHE+AESGCM:ECDHE+CHACHA20",
+        ws_max_size=config.max_transport_message_bytes,
+        ws_per_message_deflate=False,
+        proxy_headers=False,
+        server_header=False,
+        log_level="info",
+    )
+    server_config.load()
+    if server_config.ssl is None:
+        raise RuntimeError("Business server TLS context was not created")
+    server_config.ssl.minimum_version = ssl.TLSVersion.TLSv1_2
+    server_config.ssl.options |= ssl.OP_NO_COMPRESSION
+    return server_config
+
+
 async def run() -> None:
     config = GatewayConfig.from_env()
+    config.validate()
     if not config.tls_cert.is_file() or not config.tls_key.is_file():
         raise SystemExit(
             "TLS certificate/key missing. Set DEVCONTROL_TLS_CERT and "
@@ -33,16 +59,7 @@ async def run() -> None:
         config.admin_token,
     )
 
-    business = uvicorn.Server(
-        uvicorn.Config(
-            business_app,
-            host=config.host,
-            port=config.port,
-            ssl_certfile=str(config.tls_cert),
-            ssl_keyfile=str(config.tls_key),
-            log_level="info",
-        )
-    )
+    business = uvicorn.Server(_business_server_config(business_app, config))
     admin = uvicorn.Server(
         uvicorn.Config(
             admin_app,

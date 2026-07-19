@@ -6,14 +6,16 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from .composition import default_drivers
 from .config import GatewayConfig
-from .devices import DeviceRegistry
+from .registry import DeviceRegistry
 from .errors import (
     INTERNAL_ERROR,
     REPLAY_DETECTED,
     GatewayError,
 )
 from .models import PROTOCOL_VERSION, SecureCommandEnvelope
+from .mqtt_transport import MqttBridge
 from .security import ClientSession, SessionRegistry, decrypt_payload, now_ms
 from .storage import GatewayStorage
 
@@ -32,7 +34,7 @@ class GatewayService:
             config.initial_pairing_code,
             credential_ttl_seconds=config.credential_ttl_seconds,
         )
-        self.devices = DeviceRegistry(self.storage)
+        self.devices = DeviceRegistry(self.storage, drivers=default_drivers())
         self._result_cache: dict[
             tuple[str, str], tuple[float, dict[str, Any]]
         ] = {}
@@ -41,8 +43,11 @@ class GatewayService:
         self._tasks: list[asyncio.Task[None]] = []
         self._command_lock = asyncio.Lock()
         self._closed = False
+        self._mqtt_bridge = MqttBridge(config, self) if config.mqtt_enabled else None
 
     async def start(self) -> None:
+        if self._mqtt_bridge is not None:
+            await self._mqtt_bridge.start()
         if self.config.enable_background_tasks and not self._tasks:
             self._tasks = [
                 asyncio.create_task(self._telemetry_loop()),
@@ -50,6 +55,8 @@ class GatewayService:
             ]
 
     async def stop(self) -> None:
+        if self._mqtt_bridge is not None:
+            await self._mqtt_bridge.stop()
         for task in self._tasks:
             task.cancel()
         if self._tasks:
