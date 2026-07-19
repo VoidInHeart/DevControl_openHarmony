@@ -1,5 +1,6 @@
 import { AccessLogEntry, AlertEntry, DeviceType, DoorLockDevice } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 import { LockIcon } from './LockIcon';
 
 @Component
@@ -117,6 +118,7 @@ export struct DoorLockTab {
     .padding(18)
     .borderRadius(24)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
     .alignItems(HorizontalAlign.Center)
     .margin({ bottom: 12 })
   }
@@ -218,6 +220,7 @@ export struct DoorLockTab {
     .padding(16)
     .borderRadius(24)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 12 })
   }
 
@@ -262,6 +265,7 @@ export struct DoorLockTab {
     .padding(16)
     .borderRadius(16)
     .backgroundColor($r('app.color.card_background'))
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 12 })
   }
 
@@ -307,6 +311,7 @@ export struct DoorLockTab {
     .padding(16)
     .borderRadius(16)
     .backgroundColor($r('app.color.card_background'))
+    .visualEffect(immersiveCardEffect())
   }
 
   private canControl(device: DoorLockDevice): boolean {

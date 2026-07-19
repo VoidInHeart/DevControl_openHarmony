@@ -1,4 +1,6 @@
 import { common } from '@kit.AbilityKit';
+import { hdsMaterial, HdsTabs } from '@kit.UIDesignKit';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 import { ControlCenterTab } from '../components/ControlCenterTab';
 import { LockIcon } from '../components/LockIcon';
 import { PairingPage } from '../components/PairingPage';
@@ -135,18 +137,41 @@ struct Index {
       if (this.deviceManager.pairingRequired) {
         PairingPage()
       } else {
-        Column() {
-          if (this.currentTab === 'home') {
+        HdsTabs() {
+          TabContent() {
             ControlCenterTab()
-          } else if (this.currentTab === 'smart') {
+          }
+          .tabBar(this.TabButton('home', $r('app.media.nav_home'), '家'))
+
+          TabContent() {
             this.SmartTab()
-          } else {
+          }
+          .tabBar(this.TabButton('smart', $r('app.media.nav_smart'), '智能'))
+
+          TabContent() {
             SettingsTab()
           }
+          .tabBar(this.TabButton('settings', $r('app.media.nav_settings'), '设置'))
         }
         .width('100%')
-        .layoutWeight(1)
-        this.BottomTabBar()
+        .height('100%')
+        .barPosition(BarPosition.End)
+        .scrollable(false)
+        .barOverlap(true)
+        .barHeight(64)
+        .barFloatingStyle({
+          barSideMargin: 18,
+          barBottomMargin: 16,
+          adaptToHandedness: true,
+          lightColor: '#C9EAFF',
+          systemMaterialEffect: {
+            materialType: hdsMaterial.MaterialType.ADAPTIVE,
+            materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+          }
+        })
+        .onChange((index: number) => {
+          this.currentTab = this.tabKey(index);
+        })
       }
     }
     .width('100%')
@@ -155,51 +180,45 @@ struct Index {
   }
 
   @Builder
-  BottomTabBar() {
-    Row() {
-      this.TabButton('home', '⌂', '家')
-      this.TabButton('smart', '↯', '智能')
-      this.TabButton('settings', '○', '设置')
+  TabButton(tab: string, icon: Resource, label: string) {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Stack({ alignContent: Alignment.Center }) {
+          Image(icon)
+            .width(22)
+            .height(22)
+            .objectFit(ImageFit.Contain)
+            .fillColor(tab === this.currentTab ? '#1769C2' : '#6F8094')
+        }
+        .width(26)
+        .height(26)
+        Text(label)
+          .fontSize(12)
+          .lineHeight(16)
+          .fontWeight(tab === this.currentTab ? FontWeight.Bold : FontWeight.Normal)
+          .fontColor(tab === this.currentTab ? '#1769C2' : '#6F8094')
+          .textAlign(TextAlign.Center)
+          .width('100%')
+      }
+      .width(88)
+      .height(48)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .backgroundColor(tab === this.currentTab ? '#1A1769C2' : Color.Transparent)
+      .borderRadius(24)
     }
     .width('100%')
-    .height(68)
-    .padding({ left: 28, right: 28, top: 5, bottom: 5 })
-    .justifyContent(FlexAlign.SpaceBetween)
-    .backgroundColor(Color.White)
+    .height(60)
   }
 
-  @Builder
-  TabButton(tab: string, icon: string, label: string) {
-    Column() {
-      Text(icon)
-        .fontSize(27)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(tab === this.currentTab ? '#1769C2' : '#6F8094')
-        .width(32)
-        .height(30)
-        .lineHeight(30)
-        .textAlign(TextAlign.Center)
-        .opacity(1)
-      Text(label)
-        .fontSize(12)
-        .fontWeight(tab === this.currentTab ? FontWeight.Bold : FontWeight.Normal)
-        .fontColor(tab === this.currentTab ? '#1769C2' : '#6F8094')
-        .width(40)
-        .height(18)
-        .lineHeight(18)
-        .textAlign(TextAlign.Center)
-        .opacity(1)
-        .margin({ top: 2 })
+  private tabKey(index: number): string {
+    if (index === 1) {
+      return 'smart';
     }
-    .width(78)
-    .height(56)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(22)
-    .onClick(() => {
-      this.currentTab = tab;
-    })
+    if (index === 2) {
+      return 'settings';
+    }
+    return 'home';
   }
 
   @Builder
@@ -269,7 +288,7 @@ struct Index {
         this.SceneResultPanel()
       }
       .width('100%')
-      .padding({ left: 18, right: 18, top: 42, bottom: 24 })
+      .padding({ left: 18, right: 18, top: 42, bottom: 112 })
     }
     .width('100%')
     .height('100%')
@@ -344,6 +363,7 @@ struct Index {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(24)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 14 })
   }
 
@@ -469,6 +489,7 @@ struct Index {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(24)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 14 })
   }
 
@@ -492,6 +513,8 @@ struct Index {
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(this.isActiveQuickScene(scene) ? '#EAF4FF' : '#F7FBFF')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
     .margin({ right: scene.id === 'home' ? 10 : 0 })
     .onClick(() => {
       if (this.consumeSuppressedSceneTap(scene.id)) {
@@ -534,6 +557,8 @@ struct Index {
     .padding(14)
     .backgroundColor('#F7FBFF')
     .borderRadius(18)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
     .margin({ top: 10 })
     .onClick(() => {
       if (this.consumeSuppressedSceneTap(scene.id)) {
@@ -701,7 +726,7 @@ struct Index {
           })
       }
       .width('100%')
-      .padding({ left: 18, right: 18, top: 34, bottom: 18 })
+      .padding({ left: 18, right: 18, top: 34, bottom: 108 })
     }
     .width('100%')
     .height('100%')
@@ -818,6 +843,7 @@ struct Index {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(24)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 14 })
   }
 
@@ -864,6 +890,8 @@ struct Index {
     .padding(18)
     .backgroundColor('#F7FBFF')
     .borderRadius(22)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .onClick(() => {
       this.smartDetailTemplateId = templateId;
     })
@@ -898,6 +926,8 @@ struct Index {
     .alignItems(HorizontalAlign.Start)
     .backgroundColor('#F7FBFF')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
     .margin({ right: 10 })
     .onClick(() => {
       this.smartDetailTemplateId = templateId;
@@ -952,6 +982,7 @@ struct Index {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(24)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 14 })
   }
 
@@ -965,6 +996,8 @@ struct Index {
       .layoutWeight(1)
       .backgroundColor(this.customCondition === value ? '#EAF4FF' : '#F7FBFF')
       .borderRadius(16)
+      .visualEffect(immersiveCardEffect())
+      .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.97 })
       .margin({ right: 8 })
       .onClick(() => {
         this.customCondition = value;
@@ -981,6 +1014,8 @@ struct Index {
       .layoutWeight(1)
       .backgroundColor(this.customAction === value ? '#EAF4FF' : '#F7FBFF')
       .borderRadius(16)
+      .visualEffect(immersiveCardEffect())
+      .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.97 })
       .margin({ right: 8 })
       .onClick(() => {
         this.customAction = value;
@@ -1046,7 +1081,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 24, right: 24, top: 42, bottom: 18 })
+    .padding({ left: 24, right: 24, top: 42, bottom: 104 })
     .backgroundColor('#DCEAF2')
   }
 
@@ -1121,7 +1156,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 24, right: 24, top: 42, bottom: 18 })
+    .padding({ left: 24, right: 24, top: 42, bottom: 104 })
     .backgroundColor('#DCEAF2')
   }
 
@@ -1165,6 +1200,7 @@ struct Index {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(24)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 14 })
   }
 
@@ -1202,6 +1238,7 @@ struct Index {
     .padding(18)
     .borderRadius(24)
     .backgroundColor(Color.White)
+    .visualEffect(immersiveCardEffect())
   }
 
   @Builder
@@ -1216,6 +1253,10 @@ struct Index {
       Text(icon)
         .fontSize(size)
         .fontColor('#1769C2')
+        .width(size + 12)
+        .height(size + 12)
+        .lineHeight(size + 12)
+        .textAlign(TextAlign.Center)
     }
   }
 

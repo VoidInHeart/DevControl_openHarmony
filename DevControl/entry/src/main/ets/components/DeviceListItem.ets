@@ -1,4 +1,5 @@
 import { router } from '@kit.ArkUI';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 import { DeviceInfo } from '../model/DeviceModel';
 import { DeviceRegistry } from '../model/DeviceRegistry';
 import { GenericDevice } from '../model/GenericDeviceModel';
@@ -13,6 +14,11 @@ export struct DeviceListItem {
       Stack({ alignContent: Alignment.Center }) {
         if (this.isCurtainDevice()) {
           CurtainIcon({ iconSize: 30 })
+        } else if (this.isEnvironmentCategoryDevice()) {
+          Image($r('app.media.device_environment'))
+            .width(26)
+            .height(26)
+            .objectFit(ImageFit.Contain)
         } else {
           Text(this.deviceIcon())
             .fontSize(30)
@@ -24,7 +30,7 @@ export struct DeviceListItem {
       }
         .width(48)
         .height(48)
-        .backgroundColor('#EAF5FF')
+        .backgroundColor(this.isEnvironmentCategoryDevice() ? '#E8F8F3' : '#EAF5FF')
         .borderRadius(14)
       Column() {
         Text(this.device.name)
@@ -53,6 +59,8 @@ export struct DeviceListItem {
     .margin({ bottom: 10 })
     .borderRadius(18)
     .backgroundColor(Color.White)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
       router.pushUrl({
@@ -69,6 +77,11 @@ export struct DeviceListItem {
   private isCurtainDevice(): boolean {
     return DeviceRegistry.getCapability(this.device.type) === null &&
       (this.device as GenericDevice).category.id === 'curtains';
+  }
+
+  private isEnvironmentCategoryDevice(): boolean {
+    return DeviceRegistry.getCapability(this.device.type) === null &&
+      (this.device as GenericDevice).category.id === 'environment';
   }
 
   private deviceSummary(): string {

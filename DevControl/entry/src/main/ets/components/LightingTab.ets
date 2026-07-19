@@ -1,6 +1,7 @@
 import { EnvironmentDevice, LightDevice } from '../model/DeviceModel';
 import { DeviceRegistry } from '../model/DeviceRegistry';
 import { DeviceManager } from '../model/DeviceManager';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 
 @Component
 export struct LightingTab {
@@ -88,6 +89,7 @@ export struct LightingTab {
           .fontColor(device.state.power ? '#F2B84B' : '#8AA0B6')
           .width(56)
           .height(56)
+          .lineHeight(56)
           .textAlign(TextAlign.Center)
           .backgroundColor(device.state.power ? '#FFF4D8' : '#EEF5FB')
           .borderRadius(20)
@@ -161,6 +163,7 @@ export struct LightingTab {
     .padding(16)
     .borderRadius(24)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 12 })
   }
 
@@ -270,6 +273,7 @@ export struct LightingTab {
     .padding(16)
     .borderRadius(24)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
   }
 
   @Builder

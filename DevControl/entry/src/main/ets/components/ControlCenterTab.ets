@@ -1,4 +1,5 @@
 import { router } from '@kit.ArkUI';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 import {
   ACMode,
   AirConditionerDevice,
@@ -22,6 +23,8 @@ export struct ControlCenterTab {
   @State showMetricSheet: boolean = false;
   @State showAddMenu: boolean = false;
   @State activeMetric: string = '';
+  @State showHumidifierControl: boolean = false;
+  @State activeHumidifierId: string = '';
   private roomSegmentsScroller: Scroller = new Scroller();
 
   build() {
@@ -54,13 +57,21 @@ export struct ControlCenterTab {
         }
         .width('100%')
         .layoutWeight(1)
-        .padding({ left: 18, right: 18, top: 0, bottom: 0 })
+        .padding({ left: 18, right: 18, top: 0, bottom: 104 })
         .scrollBar(BarState.Off)
       }
     }
     .width('100%')
     .layoutWeight(1)
     .backgroundColor('#DCEAF2')
+    .bindContentCover(this.showHumidifierControl, this.HumidifierControlCover(), {
+      backgroundColor: '#DCEAF2',
+      modalTransition: ModalTransition.DEFAULT,
+      onDisappear: () => {
+        this.showHumidifierControl = false;
+        this.activeHumidifierId = '';
+      }
+    })
     .bindSheet(this.showMetricSheet, this.MetricSheet(), {
       height: '70%',
       dragBar: true,
@@ -77,7 +88,7 @@ export struct ControlCenterTab {
     Stack({ alignContent: Alignment.TopEnd }) {
       Row() {
         Column() {
-          Text('DevControl 的家')
+          Text('DevControl')
             .fontSize(30)
             .fontWeight(FontWeight.Bold)
             .fontColor('#14263A')
@@ -185,6 +196,215 @@ export struct ControlCenterTab {
   }
 
   @Builder
+  HumidifierControlCover() {
+    Column() {
+      Row() {
+        Column() {
+          Text('加湿器控制')
+            .fontSize(26)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text('调节设备开关与目标湿度')
+            .fontSize(13)
+            .fontColor('#748294')
+            .margin({ top: 5 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Stack({ alignContent: Alignment.Center }) {
+          Text('×')
+            .fontSize(30)
+            .fontColor('#14263A')
+            .width('100%')
+            .height('100%')
+            .lineHeight(46)
+            .textAlign(TextAlign.Center)
+            .translate({ y: -1 })
+        }
+        .id('humidifier-control-close')
+        .width(46)
+        .height(46)
+        .backgroundColor('#F7FBFF')
+        .borderRadius(23)
+        .onClick(() => {
+          this.showHumidifierControl = false;
+        })
+      }
+      .width('100%')
+
+      if (this.activeHumidifier() === null) {
+        Column() {
+          Text('设备不可用')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text('该加湿器可能已离线或被移除')
+            .fontSize(13)
+            .fontColor('#748294')
+            .margin({ top: 8 })
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      } else {
+        this.HumidifierControlPanel(this.activeHumidifier() as GenericDevice)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 20, right: 20, top: 42, bottom: 28 })
+    .backgroundColor('#DCEAF2')
+  }
+
+  @Builder
+  HumidifierControlPanel(device: GenericDevice) {
+    Scroll() {
+      Column() {
+        Row() {
+          Stack({ alignContent: Alignment.Center }) {
+            Image($r('app.media.device_environment'))
+              .width(32)
+              .height(32)
+              .objectFit(ImageFit.Contain)
+          }
+          .width(62)
+          .height(62)
+          .backgroundColor('#E8F8F3')
+          .borderRadius(21)
+          Column() {
+            Text(device.name)
+              .fontSize(21)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#14263A')
+            Text(this.humidifierStatus(device))
+              .fontSize(13)
+              .fontColor(this.isHumidifierOnline(device) ? '#0F8F66' : '#D64545')
+              .margin({ top: 5 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          .margin({ left: 14 })
+          Text(this.isHumidifierOnline(device) ? '在线' : '离线')
+            .fontSize(12)
+            .fontColor(this.isHumidifierOnline(device) ? '#0F8F66' : '#D64545')
+            .padding({ left: 11, right: 11, top: 6, bottom: 6 })
+            .backgroundColor(this.isHumidifierOnline(device) ? '#EAF8F1' : '#FFF1F1')
+            .borderRadius(14)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Divider()
+          .color('#E6EDF3')
+          .margin({ top: 20, bottom: 20 })
+
+        Row() {
+          Column() {
+            Text('电源开关')
+              .fontSize(17)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#14263A')
+            Text(this.genericPower(device) ? '加湿器正在运行' : '加湿器已关闭')
+              .fontSize(12)
+              .fontColor('#748294')
+              .margin({ top: 5 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.genericPower(device) })
+            .id('humidifier-control-power')
+            .enabled(this.canControlDevice(device))
+            .opacity(this.canControlDevice(device) ? 1 : 0.45)
+            .selectedColor('#0F8F66')
+            .onChange((power: boolean) => {
+              this.setGenericPower(device, power);
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Column() {
+          Row() {
+            Column() {
+              Text('目标湿度')
+                .fontSize(17)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text('建议范围 40%–60%')
+                .fontSize(12)
+                .fontColor('#748294')
+                .margin({ top: 5 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text(this.humidifierTarget(device).toFixed(0) + '%')
+              .fontSize(30)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#0F8F66')
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+
+          Slider({
+            value: this.humidifierTarget(device),
+            min: 35,
+            max: 75,
+            step: 1,
+            style: SliderStyle.OutSet
+          })
+            .id('humidifier-control-target')
+            .width('100%')
+            .enabled(this.canControlDevice(device))
+            .opacity(this.canControlDevice(device) ? 1 : 0.45)
+            .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+            .selectedColor('#0F8F66')
+            .margin({ top: 18 })
+            .onChange((value: number, mode: SliderChangeMode) => {
+              if (this.shouldCommitSlider(mode)) {
+                this.setHumidifierTarget(device, value);
+              }
+            })
+
+          Row() {
+            Text('35%')
+              .fontSize(11)
+              .fontColor('#748294')
+            Blank()
+            Text('75%')
+              .fontSize(11)
+              .fontColor('#748294')
+          }
+          .width('100%')
+          .margin({ top: 4 })
+        }
+        .width('100%')
+        .margin({ top: 22 })
+
+        if (this.deviceManager.isDevicePending(device.id)) {
+          Text('设置正在同步到设备…')
+            .fontSize(12)
+            .fontColor('#8A5A00')
+            .width('100%')
+            .padding(12)
+            .backgroundColor('#FFF3D6')
+            .borderRadius(14)
+            .margin({ top: 20 })
+        }
+      }
+      .width('100%')
+      .padding(20)
+      .backgroundColor('#F7FBFF')
+      .borderRadius(26)
+      .visualEffect(immersiveCardEffect())
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .margin({ top: 22 })
+    .scrollBar(BarState.Off)
+  }
+
+  @Builder
   StatusStrip() {
     Row() {
       this.TemperaturePill()
@@ -200,9 +420,10 @@ export struct ControlCenterTab {
   @Builder
   TemperaturePill() {
     Column() {
-      Text('│')
-        .fontSize(20)
-        .opacity(0.85)
+      Image($r('app.media.metric_temperature'))
+        .width(22)
+        .height(22)
+        .objectFit(ImageFit.Contain)
       Text(this.averageTemperature())
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
@@ -219,6 +440,8 @@ export struct ControlCenterTab {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor('#EAF4FF')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.96 })
     .onClick(() => {
       this.openMetricSheet('temperature');
     })
@@ -227,9 +450,10 @@ export struct ControlCenterTab {
   @Builder
   HumidityPill() {
     Column() {
-      Text('●')
-        .fontSize(20)
-        .opacity(0.85)
+      Image($r('app.media.device_environment'))
+        .width(22)
+        .height(22)
+        .objectFit(ImageFit.Contain)
       Text(this.averageHumidity())
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
@@ -246,6 +470,8 @@ export struct ControlCenterTab {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor('#EEF9F4')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.96 })
     .onClick(() => {
       this.openMetricSheet('humidity');
     })
@@ -254,9 +480,10 @@ export struct ControlCenterTab {
   @Builder
   LightsPill() {
     Column() {
-      Text('○')
-        .fontSize(20)
-        .opacity(0.85)
+      Image($r('app.media.device_light'))
+        .width(22)
+        .height(22)
+        .objectFit(ImageFit.Contain)
       Text(this.lightsOnCount().toString())
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
@@ -273,6 +500,8 @@ export struct ControlCenterTab {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor('#FFF7E8')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.96 })
     .onClick(() => {
       this.openMetricSheet('lights');
     })
@@ -281,9 +510,10 @@ export struct ControlCenterTab {
   @Builder
   OnlinePill() {
     Column() {
-      Text('●')
-        .fontSize(20)
-        .opacity(0.85)
+      Image($r('app.media.metric_online'))
+        .width(22)
+        .height(22)
+        .objectFit(ImageFit.Contain)
       Text(this.onlineDeviceCount().toString())
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
@@ -300,6 +530,8 @@ export struct ControlCenterTab {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor('#F0EEFF')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.96 })
     .onClick(() => {
       this.openMetricSheet('online');
     })
@@ -372,14 +604,16 @@ export struct ControlCenterTab {
       } else {
         ForEach(this.activeLights(), (device: LightDevice) => {
           Row() {
-            Text('○')
-              .fontSize(28)
-              .fontColor('#A46A00')
-              .width(48)
-              .height(48)
-              .textAlign(TextAlign.Center)
-              .backgroundColor('#FFF4D8')
-              .borderRadius(16)
+            Stack({ alignContent: Alignment.Center }) {
+              Image($r('app.media.device_light'))
+                .width(25)
+                .height(25)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(48)
+            .height(48)
+            .backgroundColor('#FFF4D8')
+            .borderRadius(16)
             Column() {
               Text(device.name)
                 .fontSize(16)
@@ -428,14 +662,16 @@ export struct ControlCenterTab {
         ForEach(this.scopedAirConditioners(), (device: AirConditionerDevice) => {
           Column() {
             Row() {
-              Text('❄')
-                .fontSize(24)
-                .fontColor('#1769C2')
-                .width(48)
-                .height(48)
-                .textAlign(TextAlign.Center)
-                .backgroundColor('#EAF4FF')
-                .borderRadius(16)
+              Stack({ alignContent: Alignment.Center }) {
+                Image($r('app.media.device_air_conditioner'))
+                  .width(25)
+                  .height(25)
+                  .objectFit(ImageFit.Contain)
+              }
+              .width(48)
+              .height(48)
+              .backgroundColor('#EAF4FF')
+              .borderRadius(16)
               Column() {
                 Text(device.name)
                   .fontSize(16)
@@ -534,15 +770,16 @@ export struct ControlCenterTab {
       } else {
         ForEach(this.scopedAirConditioners(), (device: AirConditionerDevice) => {
           Row() {
-            Text('❄')
-              .fontSize(23)
-              .fontColor('#1769C2')
-              .width(46)
-              .height(46)
-              .lineHeight(46)
-              .textAlign(TextAlign.Center)
-              .backgroundColor('#EAF4FF')
-              .borderRadius(15)
+            Stack({ alignContent: Alignment.Center }) {
+              Image($r('app.media.device_air_conditioner'))
+                .width(24)
+                .height(24)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(46)
+            .height(46)
+            .backgroundColor('#EAF4FF')
+            .borderRadius(15)
             Column() {
               Text(device.name)
                 .fontSize(16)
@@ -584,16 +821,16 @@ export struct ControlCenterTab {
       } else {
         ForEach(this.scopedHumidifiers(), (device: GenericDevice) => {
           Row() {
-            Text('≈')
-              .fontSize(28)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#0F8F66')
-              .width(46)
-              .height(46)
-              .lineHeight(43)
-              .textAlign(TextAlign.Center)
-              .backgroundColor('#E8F8F3')
-              .borderRadius(15)
+            Stack({ alignContent: Alignment.Center }) {
+              Image($r('app.media.device_environment'))
+                .width(24)
+                .height(24)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(46)
+            .height(46)
+            .backgroundColor('#E8F8F3')
+            .borderRadius(15)
             Column() {
               Text(device.name)
                 .fontSize(16)
@@ -764,6 +1001,7 @@ export struct ControlCenterTab {
         .fontColor('#1769C2')
         .width(64)
         .height(64)
+        .lineHeight(64)
         .textAlign(TextAlign.Center)
         .backgroundColor('#F4F8FF')
         .borderRadius(24)
@@ -773,6 +1011,7 @@ export struct ControlCenterTab {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(24)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 18 })
   }
 
@@ -814,6 +1053,11 @@ export struct ControlCenterTab {
             LockIcon({ locked: true, iconSize: 26 })
           } else if (feature.id === 'curtains') {
             CurtainIcon({ iconSize: 32 })
+          } else if (feature.id === 'environment') {
+            Image($r('app.media.device_environment'))
+              .width(30)
+              .height(30)
+              .objectFit(ImageFit.Contain)
           } else {
             Text(feature.icon)
               .fontSize(34)
@@ -838,6 +1082,8 @@ export struct ControlCenterTab {
     .margin({ bottom: 12 })
     .borderRadius(22)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.97 })
     .onClick(() => {
       this.openFeature(feature.id);
     })
@@ -892,11 +1138,19 @@ export struct ControlCenterTab {
     .margin({ bottom: 10 })
     .borderRadius(24)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
+    .alignItems(VerticalAlign.Center)
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .onClick(() => {
-      router.pushUrl({
-        url: 'pages/DeviceDetail',
-        params: { deviceId: device.id }
-      });
+      if (device.type === 'humidifier') {
+        this.activeHumidifierId = device.id;
+        this.showHumidifierControl = true;
+      } else {
+        router.pushUrl({
+          url: 'pages/DeviceDetail',
+          params: { deviceId: device.id }
+        });
+      }
     })
   }
 
@@ -907,6 +1161,26 @@ export struct ControlCenterTab {
         LockIcon({ locked: (device as DoorLockDevice).state.locked, iconSize: badgeSize - 20 })
       } else if (this.isCurtainDevice(device)) {
         CurtainIcon({ iconSize: badgeSize - 18 })
+      } else if (device.type === DeviceType.LIGHT) {
+        Image($r('app.media.device_light'))
+          .width(badgeSize - 22)
+          .height(badgeSize - 22)
+          .objectFit(ImageFit.Contain)
+      } else if (device.type === DeviceType.ENVIRONMENT) {
+        Image($r('app.media.device_environment'))
+          .width(badgeSize - 22)
+          .height(badgeSize - 22)
+          .objectFit(ImageFit.Contain)
+      } else if (this.isEnvironmentCategoryDevice(device)) {
+        Image($r('app.media.device_environment'))
+          .width(badgeSize - 22)
+          .height(badgeSize - 22)
+          .objectFit(ImageFit.Contain)
+      } else if (device.type === DeviceType.AIR_CONDITIONER) {
+        Image($r('app.media.device_air_conditioner'))
+          .width(badgeSize - 22)
+          .height(badgeSize - 22)
+          .objectFit(ImageFit.Contain)
       } else {
         Text(this.deviceIcon(device))
           .fontSize(badgeSize - 27)
@@ -1015,6 +1289,37 @@ export struct ControlCenterTab {
     const payload: CommandPayload = {};
     payload['power'] = power;
     this.deviceManager.executeDeviceAction(device, 'setPower', payload);
+  }
+
+  private setHumidifierTarget(device: GenericDevice, targetHumidityPercent: number): void {
+    const payload: CommandPayload = {};
+    payload['targetHumidityPercent'] = Math.round(targetHumidityPercent);
+    this.deviceManager.executeDeviceAction(device, 'setTargetHumidity', payload);
+  }
+
+  private activeHumidifier(): GenericDevice | null {
+    const device = this.deviceManager.getDeviceById(this.activeHumidifierId);
+    if (device === null || device.type !== 'humidifier') {
+      return null;
+    }
+    return device as GenericDevice;
+  }
+
+  private humidifierStatus(device: GenericDevice): string {
+    if (!this.deviceManager.isOnline()) {
+      return '网关离线';
+    }
+    if (!device.online) {
+      return '设备离线';
+    }
+    if (this.deviceManager.isDevicePending(device.id)) {
+      return '正在同步设置';
+    }
+    return this.genericPower(device) ? '正在加湿' : '已关闭';
+  }
+
+  private isHumidifierOnline(device: GenericDevice): boolean {
+    return this.deviceManager.isOnline() && device.online;
   }
 
   private activeLights(): LightDevice[] {
@@ -1191,6 +1496,11 @@ export struct ControlCenterTab {
       (device as GenericDevice).category.id === 'curtains';
   }
 
+  private isEnvironmentCategoryDevice(device: DeviceInfo): boolean {
+    return DeviceRegistry.getCapability(device.type) === null &&
+      (device as GenericDevice).category.id === 'environment';
+  }
+
   private deviceSummary(device: DeviceInfo): string {
     if (!device.online) {
       return '设备离线';
@@ -1237,7 +1547,7 @@ export struct ControlCenterTab {
   }
 
   private headerSubtitle(): string {
-    return '全屋设备已连接 · ' + this.deviceManager.getConnectionLabel();
+    return this.deviceManager.getConnectionLabel();
   }
 
   private averageTemperature(): string {

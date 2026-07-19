@@ -1,5 +1,6 @@
 import { CommandPayload } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 import {
   DeviceControl,
   DeviceControlKind,
@@ -53,6 +54,11 @@ export struct GenericDeviceControl {
       Stack({ alignContent: Alignment.Center }) {
         if (device.category.id === 'curtains') {
           CurtainIcon({ iconSize: 34 })
+        } else if (device.category.id === 'environment') {
+          Image($r('app.media.device_environment'))
+            .width(30)
+            .height(30)
+            .objectFit(ImageFit.Contain)
         } else {
           Text(device.category.icon)
             .fontSize(38)
@@ -64,7 +70,7 @@ export struct GenericDeviceControl {
       }
         .width(58)
         .height(58)
-        .backgroundColor('#EAF5FF')
+        .backgroundColor(device.category.id === 'environment' ? '#E8F8F3' : '#EAF5FF')
         .borderRadius(18)
       Column() {
         Text(device.name)
@@ -91,6 +97,7 @@ export struct GenericDeviceControl {
     .margin({ bottom: 12 })
     .borderRadius(18)
     .backgroundColor(Color.White)
+    .visualEffect(immersiveCardEffect())
     .alignItems(VerticalAlign.Center)
   }
 
@@ -192,6 +199,7 @@ export struct GenericDeviceControl {
     .margin({ bottom: 12 })
     .borderRadius(18)
     .backgroundColor(Color.White)
+    .visualEffect(immersiveCardEffect())
     .alignItems(HorizontalAlign.Start)
   }
 
