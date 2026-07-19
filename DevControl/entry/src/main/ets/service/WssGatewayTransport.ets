@@ -9,6 +9,10 @@ import {
   GatewaySession,
   parseDevices
 } from '../model/DeviceModel';
+import {
+  DeviceRegistrationReceipt,
+  DeviceRegistrationRequest
+} from './DeviceRegistration';
 import { GatewayTransport, GatewayTransportListener } from './GatewayTransport';
 
 class SealedParts {
@@ -144,6 +148,43 @@ export class WssGatewayTransport implements GatewayTransport {
       result.push(point);
     }
     return result;
+  }
+
+  async registerDevice(request: DeviceRegistrationRequest): Promise<DeviceRegistrationReceipt> {
+    const session = this.requireSession();
+    const body: Record<string, Object> = {
+      'protocolVersion': request.protocolVersion,
+      'deviceId': request.deviceId,
+      'deviceName': request.deviceName,
+      'deviceType': request.deviceType,
+      'categoryId': request.categoryId,
+      'roomId': request.roomId,
+      'capabilities': request.capabilities,
+      'gatewayProofFormat': request.gatewayProofFormat,
+      'gatewayProof': request.gatewayProof
+    };
+    const response = await this.request(
+      session.gatewayAddress + '/api/v1/devices/register',
+      http.RequestMethod.POST,
+      body,
+      session.credential
+    );
+    const receipt = new DeviceRegistrationReceipt();
+    const deviceId = response['deviceId'];
+    const accepted = response['accepted'];
+    const online = response['online'];
+    if (
+      typeof deviceId !== 'string' ||
+      deviceId !== request.deviceId ||
+      typeof accepted !== 'boolean' ||
+      typeof online !== 'boolean'
+    ) {
+      throw new Error('INVALID_COMMAND:网关返回了无效的设备注册结果');
+    }
+    receipt.deviceId = deviceId;
+    receipt.accepted = accepted;
+    receipt.online = online;
+    return receipt;
   }
 
   async connect(listener: GatewayTransportListener): Promise<void> {

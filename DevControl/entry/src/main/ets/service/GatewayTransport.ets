@@ -4,6 +4,10 @@ import {
   EnvironmentHistoryPoint,
   GatewaySession
 } from '../model/DeviceModel';
+import {
+  DeviceRegistrationReceipt,
+  DeviceRegistrationRequest
+} from './DeviceRegistration';
 
 export interface GatewayTransportListener {
   onConnectionStateChanged(state: string): void;
@@ -20,6 +24,7 @@ export interface GatewayTransport {
   fetchLogs(limit: number): Promise<Record<string, Object>[]>;
   fetchAlerts(limit: number): Promise<Record<string, Object>[]>;
   fetchEnvironmentHistory(fromTimestamp: number): Promise<EnvironmentHistoryPoint[]>;
+  registerDevice(request: DeviceRegistrationRequest): Promise<DeviceRegistrationReceipt>;
   connect(listener: GatewayTransportListener): Promise<void>;
   sendCommand(
     deviceId: string,

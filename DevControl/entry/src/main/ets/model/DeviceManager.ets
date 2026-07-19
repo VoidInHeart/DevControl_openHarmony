@@ -25,6 +25,10 @@ import { DeviceSnapshotStore } from '../service/DeviceSnapshotStore';
 import { GatewaySessionStore } from '../service/GatewaySessionStore';
 import { PairingPreferenceStore } from '../service/PairingPreferenceStore';
 import { WssGatewayTransport } from '../service/WssGatewayTransport';
+import {
+  DeviceRegistrationRequest,
+  DeviceRegistrationResult
+} from '../service/DeviceRegistration';
 import { DeviceRegistry } from './DeviceRegistry';
 import {
   DeviceControl,
@@ -252,9 +256,9 @@ export class DeviceManager implements GatewayTransportListener {
     this.setError(code, message);
   }
 
-  async refreshAll(): Promise<void> {
+  async refreshAll(): Promise<boolean> {
     if (this.session === null) {
-      return;
+      return false;
     }
     try {
       const snapshot = await this.transport.fetchDeviceSnapshot();
@@ -270,11 +274,75 @@ export class DeviceManager implements GatewayTransportListener {
       this.lastError = '';
       await this.refreshLogs();
       await this.refreshEnvironmentHistory();
+      return true;
     } catch (error) {
       this.setErrorFromException(error);
       if (this.lastErrorCode === 'AUTH_FAILED') {
         this.invalidateSession(this.lastError);
       }
+      return false;
+    }
+  }
+
+  /**
+   * The gateway verifies the signed QR proof, registers the device and probes
+   * every requested capability. The App then verifies the authenticated
+   * snapshot before presenting registration as successful.
+   */
+  async registerDevice(request: DeviceRegistrationRequest): Promise<DeviceRegistrationResult> {
+    const result = new DeviceRegistrationResult();
+    if (!this.isOnline()) {
+      result.message = '网关离线，无法验证并注册设备';
+      return result;
+    }
+    try {
+      const receipt = await this.transport.registerDevice(request);
+      if (!receipt.accepted) {
+        result.message = '网关未接受该设备的认证信息';
+        return result;
+      }
+      if (!receipt.online) {
+        result.message = '设备已认证，但未通过网关在线探测';
+        return result;
+      }
+      const snapshotSynchronized = await this.refreshAll();
+      if (!snapshotSynchronized) {
+        result.message = '网关注册成功，但设备快照同步失败';
+        return result;
+      }
+      const device = this.getDeviceById(request.deviceId);
+      if (device === null || !device.online) {
+        result.message = '网关尚未同步到在线设备，请稍后重试';
+        return result;
+      }
+      if (device.name !== request.deviceName) {
+        result.message = '网关返回的设备名称与二维码不一致';
+        return result;
+      }
+      if (device.roomId !== request.roomId) {
+        result.message = '网关返回的所属房间与二维码不一致';
+        return result;
+      }
+      if (device.type !== request.deviceType) {
+        result.message = '网关返回的设备类型与二维码不一致';
+        return result;
+      }
+      if (!this.matchesRegistrationCategory(device, request.categoryId)) {
+        result.message = '网关返回的设备分类与二维码不一致';
+        return result;
+      }
+      if (!this.matchesRegistrationCapabilities(device, request.capabilities)) {
+        result.message = '设备未通过全部能力接口校验';
+        return result;
+      }
+      result.registered = true;
+      result.online = true;
+      result.message = '设备已注册并通过网关在线校验';
+      return result;
+    } catch (error) {
+      this.setErrorFromException(error);
+      result.message = this.lastError.length > 0 ? this.lastError : '设备注册失败';
+      return result;
     }
   }
 
@@ -561,6 +629,31 @@ export class DeviceManager implements GatewayTransportListener {
     if (action === 'awayScene') {
       await this.executeAwayScene();
     }
+  }
+
+  private matchesRegistrationCategory(device: DeviceInfo, categoryId: string): boolean {
+    if (device.type === DeviceType.LIGHT) {
+      return categoryId === 'lighting';
+    }
+    if (
+      device.type === DeviceType.ENVIRONMENT ||
+      device.type === DeviceType.AIR_CONDITIONER
+    ) {
+      return categoryId === 'environment';
+    }
+    if (device.type === DeviceType.DOOR_LOCK) {
+      return categoryId === 'locks';
+    }
+    return (device as GenericDevice).category.id === categoryId;
+  }
+
+  private matchesRegistrationCapabilities(device: DeviceInfo, capabilities: string[]): boolean {
+    for (let index = 0; index < capabilities.length; index++) {
+      if (!DeviceRegistry.supportsDeviceAction(device, capabilities[index])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private async connectAndSync(): Promise<void> {
