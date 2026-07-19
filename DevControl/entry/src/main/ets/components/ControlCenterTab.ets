@@ -88,7 +88,7 @@ export struct ControlCenterTab {
     Stack({ alignContent: Alignment.TopEnd }) {
       Row() {
         Column() {
-          Text('DevControl')
+          Text('鸿途智联')
             .fontSize(30)
             .fontWeight(FontWeight.Bold)
             .fontColor('#14263A')
