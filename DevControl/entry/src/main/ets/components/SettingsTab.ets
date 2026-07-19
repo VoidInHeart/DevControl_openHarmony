@@ -514,6 +514,7 @@ export struct SettingsTab {
         .fontColor('#14263A')
         .width('100%')
       this.ErrorCodeRow('AUTH_FAILED', '会话失效，需要重新配对')
+      this.ErrorCodeRow('DEVICE_PROOF_INVALID', '设备二维码证书无效或不属于当前网关')
       this.ErrorCodeRow('DEVICE_OFFLINE', '目标设备或网关离线')
       this.ErrorCodeRow('INVALID_COMMAND', '命令参数或消息格式无效')
       this.ErrorCodeRow('COMMAND_TIMEOUT', '命令响应超过5秒')

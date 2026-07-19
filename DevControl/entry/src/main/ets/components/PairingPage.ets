@@ -3,8 +3,8 @@ import { DeviceManager } from '../model/DeviceManager';
 @Component
 export struct PairingPage {
   @Consume deviceManager: DeviceManager;
-  @State gatewayAddress: string = 'https://192.168.43.60:8443';
-  @State pairingCode: string = '123456';
+  @State gatewayAddress: string = '';
+  @State pairingCode: string = '';
 
   aboutToAppear(): void {
     if (this.deviceManager.lastGatewayAddress.length > 0) {
@@ -31,7 +31,7 @@ export struct PairingPage {
             .fontSize(14)
             .fontColor($r('app.color.text_primary'))
             .width('100%')
-          TextInput({ text: this.gatewayAddress, placeholder: 'https://192.168.1.100:8443' })
+          TextInput({ text: this.gatewayAddress, placeholder: '例如：https://192.168.1.8:8443' })
             .width('100%')
             .margin({ top: 8, bottom: 20 })
             .onChange((value: string) => {
@@ -42,7 +42,7 @@ export struct PairingPage {
             .fontSize(14)
             .fontColor($r('app.color.text_primary'))
             .width('100%')
-          TextInput({ text: this.pairingCode, placeholder: '000000' })
+          TextInput({ text: this.pairingCode, placeholder: '输入网关终端显示的六码' })
             .width('100%')
             .maxLength(6)
             .type(InputType.Number)

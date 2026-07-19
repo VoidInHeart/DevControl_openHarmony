@@ -20,6 +20,7 @@ function makeLightSnapshot(): Record<string, Object> {
   raw['roomId'] = 'living';
   raw['type'] = DeviceType.LIGHT;
   raw['online'] = true;
+  raw['removable'] = true;
   raw['stateVersion'] = 7;
   raw['updatedAt'] = '2026-07-16T12:00:00+00:00';
   raw['power'] = true;
@@ -75,6 +76,7 @@ export default function localUnitTest() {
       expect(parsed.stateVersion).assertEqual(7);
       expect(parsed.state.brightness).assertEqual(75);
       expect(parsed.state.automation.enabled).assertTrue();
+      expect(parsed.removable).assertTrue();
     });
 
     it('rejects malformed snapshots', 0, () => {

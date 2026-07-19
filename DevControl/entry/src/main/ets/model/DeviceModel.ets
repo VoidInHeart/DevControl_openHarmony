@@ -88,6 +88,7 @@ export class BaseDevice {
   roomId: string = '';
   type: string = '';
   online: boolean = false;
+  removable: boolean = false;
   stateVersion: number = 0;
   updatedAt: string = '';
 }
@@ -199,6 +200,21 @@ function requireBoolean(raw: Record<string, Object>, key: string): boolean {
   return value;
 }
 
+function optionalBoolean(
+  raw: Record<string, Object>,
+  key: string,
+  fallback: boolean = false
+): boolean {
+  const value = raw[key];
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (typeof value !== 'boolean') {
+    throw new Error('Invalid boolean field: ' + key);
+  }
+  return value;
+}
+
 function requireNumber(
   raw: Record<string, Object>,
   key: string,
@@ -246,6 +262,7 @@ function copyBase(device: BaseDevice, raw: Record<string, Object>): void {
   device.name = requireString(raw, 'name');
   device.roomId = requireString(raw, 'roomId');
   device.online = requireBoolean(raw, 'online');
+  device.removable = optionalBoolean(raw, 'removable');
   device.stateVersion = requireNumber(raw, 'stateVersion', 0, Number.MAX_SAFE_INTEGER, true);
   device.updatedAt = requireString(raw, 'updatedAt');
 }

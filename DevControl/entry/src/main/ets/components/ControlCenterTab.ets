@@ -18,7 +18,7 @@ import { LockIcon } from './LockIcon';
 @Component
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
-  @State selectedRoom: string = 'all';
+  @StorageLink('homeSelectedRoom') selectedRoom: string = 'all';
   @State showMetricSheet: boolean = false;
   @State activeMetric: string = '';
   private roomSegmentsScroller: Scroller = new Scroller();
@@ -87,8 +87,9 @@ export struct ControlCenterTab {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
       Stack({ alignContent: Alignment.Center }) {
-        Text('⌂')
-          .fontSize(30)
+        Text('+')
+          .fontSize(32)
+          .fontWeight(FontWeight.Medium)
           .fontColor('#1769C2')
           .width('100%')
           .height('100%')
@@ -98,12 +99,13 @@ export struct ControlCenterTab {
       }
         .width(46)
         .height(46)
-        .id('home-reset-button')
+        .id('home-add-device-button')
         .backgroundColor('#E4F0FF')
         .borderRadius(23)
         .onClick(() => {
-          this.selectedRoom = 'all';
-          this.roomSegmentsScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
+          router.pushUrl({
+            url: 'pages/AddDevice'
+          });
         })
     }
     .width('100%')

@@ -77,7 +77,9 @@ export class DeviceRegistry {
     new DeviceCapability(DeviceType.LIGHT, '灯光', '○', [
       'setPower', 'setBrightness', 'setAutomationConfig'
     ]),
-    new DeviceCapability(DeviceType.ENVIRONMENT, '环境', '≈', []),
+    new DeviceCapability(DeviceType.ENVIRONMENT, '环境', '≈', [
+      'reportTemperature', 'reportHumidity', 'reportIlluminance', 'reportPresence'
+    ]),
     new DeviceCapability(DeviceType.AIR_CONDITIONER, '空调', '❄', [
       'setPower', 'setMode', 'setTemperature', 'setFanSpeed', 'setDehumidify', 'setBrand'
     ]),
