@@ -18,6 +18,7 @@ import {
   SmartRuleStore
 } from '../service/SmartRuleStore';
 import { DeviceRegistry } from '../model/DeviceRegistry';
+import { GenericDevice } from '../model/GenericDeviceModel';
 
 class SceneOperationOption {
   value: string = '';
@@ -1525,6 +1526,9 @@ struct Index {
     if (device.type === DeviceType.ENVIRONMENT) {
       return ['keep'];
     }
+    if (device.type === DeviceType.DOOR_LOCK) {
+      return ['keep', 'off'];
+    }
     return ['keep', 'on', 'off'];
   }
 
@@ -1590,7 +1594,10 @@ struct Index {
     if (device.type === DeviceType.AIR_CONDITIONER) {
       return '空调';
     }
-    return '门锁';
+    if (device.type === DeviceType.DOOR_LOCK) {
+      return '门锁';
+    }
+    return (device as GenericDevice).category.title;
   }
 
   private async saveQuickScene(): Promise<void> {

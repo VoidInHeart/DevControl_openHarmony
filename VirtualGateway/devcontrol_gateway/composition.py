@@ -13,7 +13,8 @@ from .drivers import (
 
 
 def default_drivers() -> list[DeviceDriver]:
-    """Register device families; each driver registers its categories first."""
+    """Register the project's built-in device families."""
+
     return [
         LightDriver(),
         EnvironmentDriver(),

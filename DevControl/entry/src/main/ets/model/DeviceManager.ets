@@ -26,6 +26,11 @@ import { GatewaySessionStore } from '../service/GatewaySessionStore';
 import { PairingPreferenceStore } from '../service/PairingPreferenceStore';
 import { WssGatewayTransport } from '../service/WssGatewayTransport';
 import { DeviceRegistry } from './DeviceRegistry';
+import {
+  DeviceControl,
+  DeviceControlKind,
+  GenericDevice
+} from './GenericDeviceModel';
 
 @Observed
 export class DeviceManager implements GatewayTransportListener {
@@ -509,7 +514,11 @@ export class DeviceManager implements GatewayTransportListener {
       } else if (device.type === DeviceType.AIR_CONDITIONER) {
         await this.setAcPower(device as AirConditionerDevice, power);
       } else if (device.type === DeviceType.DOOR_LOCK) {
-        await this.setDoorLocked(device as DoorLockDevice, !power);
+        if (!power) {
+          await this.setDoorLocked(device as DoorLockDevice, true);
+        }
+      } else {
+        await this.executeGenericSceneOperation(device as GenericDevice, power);
       }
     }
   }
@@ -578,6 +587,44 @@ export class DeviceManager implements GatewayTransportListener {
       await this.setAcMode(airConditioners[index], mode);
       await this.setAcTemperature(airConditioners[index], temperature);
       await this.setAcFanSpeed(airConditioners[index], fanSpeed);
+    }
+  }
+
+  private async executeGenericSceneOperation(
+    device: GenericDevice,
+    power: boolean
+  ): Promise<void> {
+    let toggle: DeviceControl | null = null;
+    let namedButton: DeviceControl | null = null;
+    let slider: DeviceControl | null = null;
+    const buttonAction = power ? 'open' : 'close';
+    for (let index = 0; index < device.controls.length; index++) {
+      const control = device.controls[index];
+      if (control.kind === DeviceControlKind.TOGGLE && (toggle === null || control.primary)) {
+        toggle = control;
+      } else if (
+        control.kind === DeviceControlKind.BUTTON &&
+        control.action === buttonAction
+      ) {
+        namedButton = control;
+      } else if (control.kind === DeviceControlKind.SLIDER && (slider === null || control.primary)) {
+        slider = control;
+      }
+    }
+    if (toggle !== null) {
+      const payload: CommandPayload = {};
+      payload[toggle.payloadKey] = power;
+      await this.executeDeviceAction(device, toggle.action, payload);
+      return;
+    }
+    if (namedButton !== null) {
+      await this.executeDeviceAction(device, namedButton.action, {});
+      return;
+    }
+    if (slider !== null) {
+      const payload: CommandPayload = {};
+      payload[slider.payloadKey] = power ? slider.maximum : slider.minimum;
+      await this.executeDeviceAction(device, slider.action, payload);
     }
   }
 
