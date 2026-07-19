@@ -61,6 +61,7 @@ class DeviceDriver(ABC):
 
     device_type: str
     tick_priority: int = 100
+    requires_category: bool = True
 
     def create_categories(self) -> list[dict[str, Any]]:
         """Declare generic UI categories before creating devices that use them."""
@@ -87,6 +88,16 @@ class LightDriver(DeviceDriver):
     device_type = "light"
     tick_priority = 30
 
+    def create_categories(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": "lighting",
+                "title": "灯光",
+                "icon": "○",
+                "homeOnly": False,
+            }
+        ]
+
     def create_devices(self) -> list[dict[str, Any]]:
         return [
             self._light("light-living-01", "客厅主灯", "living", 60),
@@ -104,6 +115,7 @@ class LightDriver(DeviceDriver):
         light = base_device(device_id, name, room_id, self.device_type)
         light.update(
             {
+                "_categoryId": "lighting",
                 "power": False,
                 "brightness": brightness,
                 "lastNonZeroBrightness": brightness,
@@ -248,6 +260,7 @@ class EnvironmentDriver(DeviceDriver):
         environment = base_device(device_id, name, room_id, self.device_type)
         environment.update(
             {
+                "_categoryId": "environment",
                 "temperatureCelsius": temperature,
                 "humidityPercent": humidity,
                 "illuminanceLux": illuminance,
@@ -339,6 +352,7 @@ class AirConditionerDriver(DeviceDriver):
         air_conditioner = base_device(device_id, name, room_id, self.device_type)
         air_conditioner.update(
             {
+                "_categoryId": "environment",
                 "brand": brand,
                 "power": False,
                 "mode": "auto",
@@ -462,6 +476,7 @@ class BathHeaterDriver(DeviceDriver):
 class DoorLockDriver(DeviceDriver):
     device_type = "doorLock"
     tick_priority = 40
+    requires_category = False
 
     def create_devices(self) -> list[dict[str, Any]]:
         door = base_device("door-entry-01", "入户门锁", "entry", self.device_type)

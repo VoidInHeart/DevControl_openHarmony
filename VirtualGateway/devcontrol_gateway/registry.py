@@ -55,16 +55,16 @@ class DeviceRegistry:
                 raise ValueError(f"duplicate device id: {device_id}")
             if "category" in device:
                 raise ValueError(
-                    f"driver {device_type} must register generic categories separately"
+                    f"driver {device_type} must register categories separately"
                 )
-            if "state" in device or "controls" in device:
+            if driver.requires_category:
                 category_id = device.get("_categoryId")
                 if (
                     not isinstance(category_id, str)
                     or category_id not in registered_category_ids
                 ):
                     raise ValueError(
-                        f"driver {device_type} created a generic device without a registered category"
+                        f"driver {device_type} created a device without a registered category"
                     )
             new_ids.add(device_id)
         self.categories.update(new_categories)

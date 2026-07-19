@@ -13,10 +13,21 @@ from devcontrol_gateway.storage import GatewayStorage
 class FakeSwitchDriver(DeviceDriver):
     device_type = "fakeSwitch"
 
+    def create_categories(self) -> list[dict[str, object]]:
+        return [
+            {
+                "id": "test-switches",
+                "title": "测试开关",
+                "icon": "○",
+                "homeOnly": False,
+            }
+        ]
+
     def create_devices(self) -> list[dict[str, object]]:
         device = base_device(
             "fake-switch-01", "测试开关", "test-room", self.device_type
         )
+        device["_categoryId"] = "test-switches"
         device["power"] = False
         return [device]
 
@@ -42,10 +53,20 @@ class DuplicateTypeDriver(FakeSwitchDriver):
 class DuplicateIdDriver(FakeSwitchDriver):
     device_type = "otherSwitch"
 
-    def create_devices(self) -> list[dict[str, object]]:
+    def create_categories(self) -> list[dict[str, object]]:
         return [
-            base_device("fake-switch-01", "重复设备", "test-room", self.device_type)
+            {
+                "id": "other-switches",
+                "title": "其他开关",
+                "icon": "○",
+                "homeOnly": False,
+            }
         ]
+
+    def create_devices(self) -> list[dict[str, object]]:
+        device = base_device("fake-switch-01", "重复设备", "test-room", self.device_type)
+        device["_categoryId"] = "other-switches"
+        return [device]
 
 
 class MissingCategoryDriver(DeviceDriver):
@@ -55,7 +76,7 @@ class MissingCategoryDriver(DeviceDriver):
         device = base_device(
             "missing-category-01", "缺少分类", "test-room", self.device_type
         )
-        device.update({"_categoryId": "missing", "state": {}, "controls": []})
+        device["power"] = False
         return [device]
 
 
@@ -114,7 +135,7 @@ def test_common_offline_check_applies_to_registered_drivers(
     assert failure.value.code == DEVICE_OFFLINE
 
 
-def test_generic_devices_must_reference_a_registered_category(
+def test_devices_must_reference_a_registered_category(
     storage: GatewayStorage,
 ) -> None:
     registry = DeviceRegistry(storage, drivers=[])
@@ -141,13 +162,15 @@ def test_default_registry_restores_bedroom_devices_and_bath_heater(
 
     assert expected_ids.issubset(registry.devices)
     assert registry.categories["environment"]["title"] == "环境"
+    snapshot = {item["id"]: item for item in registry.snapshot()}
+    assert snapshot["light-living-01"]["category"]["id"] == "lighting"
+    assert snapshot["env-living-01"]["category"]["id"] == "environment"
+    assert snapshot["ac-living-01"]["category"]["id"] == "environment"
+    assert snapshot["curtain-living-01"]["category"]["id"] == "curtains"
+    assert "category" not in snapshot["door-entry-01"]
     bath_heater = registry.get("bath-heater-bathroom-01")
     assert bath_heater["_categoryId"] == "environment"
-    public_bath_heater = next(
-        item
-        for item in registry.snapshot()
-        if item["id"] == bath_heater["id"]
-    )
+    public_bath_heater = snapshot[bath_heater["id"]]
     assert public_bath_heater["category"]["id"] == "environment"
 
     result, _ = registry.execute(
