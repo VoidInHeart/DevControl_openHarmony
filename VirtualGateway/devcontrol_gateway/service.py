@@ -18,6 +18,7 @@ from .models import (
     DeviceProvisionRequest,
     DeviceRegistrationRequest,
     PROTOCOL_VERSION,
+    RoomCreateRequest,
     SecureCommandEnvelope,
 )
 from .mqtt_transport import MqttBridge
@@ -138,6 +139,28 @@ class GatewayService:
 
     def issue_registration_proof(self, declaration: DeviceProvisionRequest) -> str:
         return self.provisioning.issue(declaration)
+
+    def rooms_snapshot(self) -> list[dict[str, Any]]:
+        return self.devices.rooms_snapshot()
+
+    async def create_room(
+        self, session: ClientSession, room: RoomCreateRequest
+    ) -> dict[str, Any]:
+        async with self._registration_lock:
+            created = await asyncio.to_thread(
+                self.devices.create_room, room.roomId, room.name
+            )
+            self.storage.record_audit(
+                timestamp_ms=now_ms(),
+                client_id=session.client_id,
+                device_id=room.roomId,
+                action="createRoom",
+                result="success",
+                error_code=None,
+                message_id="create-room-" + room.roomId,
+                details=None,
+            )
+            return created
 
     async def register_device(
         self, session: ClientSession, registration: DeviceRegistrationRequest

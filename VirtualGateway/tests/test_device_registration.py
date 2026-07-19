@@ -32,7 +32,6 @@ def declaration(device_id: str) -> DeviceProvisionRequest:
         deviceName="浴室智能灯",
         deviceType="light",
         categoryId="lighting",
-        roomId="bathroom",
         capabilities=["setPower", "setBrightness", "setAutomationConfig"],
     )
 
@@ -41,6 +40,7 @@ def registration(service: GatewayService, device_id: str) -> DeviceRegistrationR
     request = declaration(device_id)
     return DeviceRegistrationRequest(
         **request.model_dump(),
+        roomId="bathroom",
         schema="devcontrol.device-registration",
         gatewayProof=service.issue_registration_proof(request),
     )
@@ -78,7 +78,6 @@ def test_signed_bathroom_environment_sensor_is_registered(tmp_path: Path) -> Non
             deviceName="浴室环境监测器",
             deviceType="environment",
             categoryId="environment",
-            roomId="bathroom",
             capabilities=[
                 "reportTemperature",
                 "reportHumidity",
@@ -88,6 +87,7 @@ def test_signed_bathroom_environment_sensor_is_registered(tmp_path: Path) -> Non
         )
         request = DeviceRegistrationRequest(
             **sensor_declaration.model_dump(),
+            roomId="bathroom",
             schema="devcontrol.device-registration",
             gatewayProof=service.issue_registration_proof(sensor_declaration),
         )
@@ -112,7 +112,6 @@ def test_signed_bathroom_air_conditioner_is_registered(tmp_path: Path) -> None:
             deviceName="浴室空调",
             deviceType="airConditioner",
             categoryId="environment",
-            roomId="bathroom",
             capabilities=[
                 "setPower",
                 "setMode",
@@ -124,6 +123,7 @@ def test_signed_bathroom_air_conditioner_is_registered(tmp_path: Path) -> None:
         )
         request = DeviceRegistrationRequest(
             **declaration_request.model_dump(),
+            roomId="bathroom",
             schema="devcontrol.device-registration",
             gatewayProof=service.issue_registration_proof(declaration_request),
         )
@@ -145,11 +145,11 @@ def test_signed_bathroom_humidifier_is_registered(tmp_path: Path) -> None:
             deviceName="浴室加湿器",
             deviceType="humidifier",
             categoryId="environment",
-            roomId="bathroom",
             capabilities=["setPower", "setTargetHumidity"],
         )
         request = DeviceRegistrationRequest(
             **declaration_request.model_dump(),
+            roomId="bathroom",
             schema="devcontrol.device-registration",
             gatewayProof=service.issue_registration_proof(declaration_request),
         )
@@ -195,6 +195,7 @@ def test_new_device_certificate_has_no_expiry_or_one_time_claim(tmp_path: Path) 
         assert "exp" not in claims
         assert "iat" not in claims
         assert "jti" not in claims
+        assert "roomId" not in claims
     finally:
         asyncio.run(service.stop())
 
@@ -211,6 +212,7 @@ def test_legacy_expired_qr_certificate_remains_usable_after_migration(
             "iat": 1,
             "exp": 2,
             "jti": "legacy-one-time-token",
+            "roomId": "bathroom",
             **declaration_request.model_dump(),
         }
         header = {"alg": "ES256", "kid": "local-device-provisioner", "typ": "JWT"}
@@ -228,6 +230,7 @@ def test_legacy_expired_qr_certificate_remains_usable_after_migration(
         )
         legacy_request = DeviceRegistrationRequest(
             **declaration_request.model_dump(),
+            roomId="living",
             schema="devcontrol.device-registration",
             gatewayProof=f"{encoded_header}.{encoded_claims}.{encoded_signature}",
         )
@@ -236,6 +239,7 @@ def test_legacy_expired_qr_certificate_remains_usable_after_migration(
             service.register_device(paired_session(service), legacy_request)
         )
         assert registered["id"] == legacy_request.deviceId
+        assert registered["roomId"] == "living"
     finally:
         asyncio.run(service.stop())
 
@@ -266,6 +270,7 @@ def test_admin_provisioning_and_device_routes_share_the_same_proof(tmp_path: Pat
         headers = {"Authorization": f"Bearer {credential}"}
         registration_body = {
             **declaration_body,
+            "roomId": "bathroom",
             "schema": "devcontrol.device-registration",
             "gatewayProofFormat": "jws",
             "gatewayProof": proof_response.json()["gatewayProof"],

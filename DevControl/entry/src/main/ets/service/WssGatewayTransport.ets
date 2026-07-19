@@ -7,7 +7,9 @@ import {
   DeviceInfo,
   EnvironmentHistoryPoint,
   GatewaySession,
-  parseDevices
+  RoomInfo,
+  parseDevices,
+  parseRooms
 } from '../model/DeviceModel';
 import {
   DeviceRemovalReceipt,
@@ -106,6 +108,17 @@ export class WssGatewayTransport implements GatewayTransport {
     return parseDevices(response['devices']);
   }
 
+  async fetchRooms(): Promise<RoomInfo[]> {
+    const session = this.requireSession();
+    const response = await this.request(
+      session.gatewayAddress + '/api/v1/rooms',
+      http.RequestMethod.GET,
+      null,
+      session.credential
+    );
+    return parseRooms(response['rooms']);
+  }
+
   async fetchLogs(limit: number): Promise<Record<string, Object>[]> {
     const session = this.requireSession();
     const response = await this.request(
@@ -187,6 +200,21 @@ export class WssGatewayTransport implements GatewayTransport {
     receipt.accepted = accepted;
     receipt.online = online;
     return receipt;
+  }
+
+  async createRoom(roomId: string, name: string): Promise<RoomInfo> {
+    const session = this.requireSession();
+    const response = await this.request(
+      session.gatewayAddress + '/api/v1/rooms',
+      http.RequestMethod.POST,
+      { 'roomId': roomId, 'name': name },
+      session.credential
+    );
+    const rooms = parseRooms([response['room']]);
+    if (rooms.length !== 1 || rooms[0].id !== roomId) {
+      throw new Error('INVALID_COMMAND:网关返回了无效的房间创建结果');
+    }
+    return rooms[0];
   }
 
   async deleteDevice(deviceId: string): Promise<DeviceRemovalReceipt> {

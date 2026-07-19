@@ -19,6 +19,15 @@ from .security import now_ms
 from .storage import GatewayStorage
 
 
+DEFAULT_ROOMS: tuple[dict[str, Any], ...] = (
+    {"id": "living", "name": "客厅", "selectable": True},
+    {"id": "masterBedroom", "name": "主卧", "selectable": True},
+    {"id": "bedroom", "name": "次卧", "selectable": True},
+    {"id": "bathroom", "name": "浴室", "selectable": True},
+    {"id": "entry", "name": "入户", "selectable": False},
+)
+
+
 class DeviceRegistry:
     """Routes devices to explicitly registered family drivers."""
 
@@ -32,6 +41,9 @@ class DeviceRegistry:
         self.categories: dict[str, dict[str, Any]] = {}
         self.drivers: dict[str, DeviceDriver] = {}
         self.devices: dict[str, dict[str, Any]] = {}
+        self.rooms: dict[str, dict[str, Any]] = {
+            room["id"]: copy.deepcopy(room) for room in DEFAULT_ROOMS
+        }
         for driver in drivers if drivers is not None else default_drivers():
             self.register_driver(driver)
 
@@ -99,6 +111,18 @@ class DeviceRegistry:
     def snapshot(self) -> list[dict[str, Any]]:
         return [self.public_device(device) for device in self.devices.values()]
 
+    def rooms_snapshot(self) -> list[dict[str, Any]]:
+        return [copy.deepcopy(room) for room in self.rooms.values()]
+
+    def create_room(self, room_id: str, name: str) -> dict[str, Any]:
+        if room_id in self.rooms:
+            raise GatewayError(INVALID_COMMAND, "房间标识已存在")
+        if any(room["name"] == name for room in self.rooms.values()):
+            raise GatewayError(INVALID_COMMAND, "房间名称已存在")
+        room = {"id": room_id, "name": name, "selectable": True}
+        self.rooms[room_id] = room
+        return copy.deepcopy(room)
+
     def public_device(self, device: dict[str, Any]) -> dict[str, Any]:
         public = copy.deepcopy(
             {key: value for key, value in device.items() if not key.startswith("_")}
@@ -125,6 +149,9 @@ class DeviceRegistry:
         category_id: str,
         capabilities: list[str],
     ) -> dict[str, Any]:
+        room = self.rooms.get(room_id)
+        if room is None or room.get("selectable") is not True:
+            raise GatewayError(INVALID_COMMAND, "目标房间不存在或不可添加设备")
         driver = self.drivers.get(device_type)
         if driver is None:
             raise GatewayError(INVALID_COMMAND, "设备类型未注册")

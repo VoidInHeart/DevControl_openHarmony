@@ -2,7 +2,8 @@ import {
   CommandPayload,
   DeviceInfo,
   EnvironmentHistoryPoint,
-  GatewaySession
+  GatewaySession,
+  RoomInfo
 } from '../model/DeviceModel';
 import {
   DeviceRemovalReceipt,
@@ -22,10 +23,12 @@ export interface GatewayTransport {
   checkHealth(address: string): Promise<boolean>;
   pair(address: string, pairingCode: string, clientId: string): Promise<GatewaySession>;
   fetchDeviceSnapshot(): Promise<DeviceInfo[]>;
+  fetchRooms(): Promise<RoomInfo[]>;
   fetchLogs(limit: number): Promise<Record<string, Object>[]>;
   fetchAlerts(limit: number): Promise<Record<string, Object>[]>;
   fetchEnvironmentHistory(fromTimestamp: number): Promise<EnvironmentHistoryPoint[]>;
   registerDevice(request: DeviceRegistrationRequest): Promise<DeviceRegistrationReceipt>;
+  createRoom(roomId: string, name: string): Promise<RoomInfo>;
   deleteDevice(deviceId: string): Promise<DeviceRemovalReceipt>;
   connect(listener: GatewayTransportListener): Promise<void>;
   sendCommand(

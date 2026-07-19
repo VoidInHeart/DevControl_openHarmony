@@ -41,6 +41,12 @@ export class ConnectionState {
   static readonly CLOSED: string = 'closed';
 }
 
+export class RoomInfo {
+  id: string = '';
+  name: string = '';
+  selectable: boolean = false;
+}
+
 export class AutomationConfig {
   enabled: boolean = false;
   illuminanceThresholdLux: number = 100;
@@ -381,6 +387,30 @@ export function parseDevices(value: Object): DeviceInfo[] {
         throw new Error(message);
       }
     }
+  }
+  return result;
+}
+
+export function parseRoom(value: Object): RoomInfo {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Room must be an object');
+  }
+  const raw = value as Record<string, Object>;
+  const room = new RoomInfo();
+  room.id = requireString(raw, 'id');
+  room.name = requireString(raw, 'name');
+  room.selectable = requireBoolean(raw, 'selectable');
+  return room;
+}
+
+export function parseRooms(value: Object): RoomInfo[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Room snapshot must be an array');
+  }
+  const result: RoomInfo[] = [];
+  const rawRooms = value as Object[];
+  for (let index = 0; index < rawRooms.length; index++) {
+    result.push(parseRoom(rawRooms[index]));
   }
   return result;
 }

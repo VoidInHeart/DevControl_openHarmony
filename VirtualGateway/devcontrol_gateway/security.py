@@ -78,7 +78,6 @@ class DeviceProvisioningAuthority:
             "deviceName": declaration.deviceName,
             "deviceType": declaration.deviceType,
             "categoryId": declaration.categoryId,
-            "roomId": declaration.roomId,
             "capabilities": declaration.capabilities,
         }
         header = {"alg": "ES256", "kid": "local-device-provisioner", "typ": "JWT"}
@@ -136,15 +135,15 @@ class DeviceProvisioningAuthority:
             "deviceName": registration.deviceName,
             "deviceType": registration.deviceType,
             "categoryId": registration.categoryId,
-            "roomId": registration.roomId,
             "capabilities": registration.capabilities,
         }
         if any(claims.get(key) != value for key, value in expected.items()):
             raise GatewayError(DEVICE_PROOF_INVALID, "设备身份证书与二维码声明不一致", 401)
 
         # Legacy QR codes signed before the static-certificate migration carry
-        # iat/exp/jti claims. Their signature and declaration are still valid,
-        # so deliberately ignore those former short-lived-token fields.
+        # iat/exp/jti and sometimes roomId claims. Their signature and device
+        # identity are still valid; room placement is now selected by the
+        # paired App user, so deliberately ignore those legacy fields.
         fingerprint = hashlib.sha256(registration.gatewayProof.encode("ascii")).hexdigest()
         return RegistrationCertificate(fingerprint=fingerprint)
 

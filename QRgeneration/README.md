@@ -22,7 +22,6 @@ python .\generation_device_qr.py `
   --device-name "浴室智能灯" `
   --device-type light `
   --category-id lighting `
-  --room-id bathroom `
   --capabilities setPower,setBrightness,setAutomationConfig `
   --admin-token '<VirtualGateway 启动日志中的令牌>'
 ```
@@ -41,27 +40,26 @@ python .\generation_device_qr.py `
   "deviceName": "浴室智能灯",
   "deviceType": "light",
   "categoryId": "lighting",
-  "roomId": "bathroom",
   "capabilities": ["setPower", "setBrightness", "setAutomationConfig"],
   "gatewayProofFormat": "jws",
   "gatewayProof": "<gateway-issued-compact-jws>"
 }
 ```
 
-字段限制与 App 完全一致：设备序列号为 3–64 位 `[A-Za-z0-9._:-]`；`deviceName` 为 1–64 个非控制字符且不能只含空白；`roomId`、类型、分类与能力为 1–64 位标识符，能力数量为 1–32 且不能重复。整个二维码内容不得超过 8192 字符。
+字段限制与 App 完全一致：设备序列号为 3–64 位 `[A-Za-z0-9._:-]`；`deviceName` 为 1–64 个非控制字符且不能只含空白；类型、分类与能力为 1–64 位标识符，能力数量为 1–32 且不能重复。整个二维码内容不得超过 8192 字符。
 
-`roomId` 是设备归属房间的稳定索引（例如 `living`、`bedroom`）。App 会使用网关快照中的同一 `roomId` 建立房间分组；内置房间会显示中文名称，其他合法标识则直接显示，便于后续扩展自定义房间。
+二维码不包含 `roomId`。识别后由用户在 App 的“添加至房间”下拉菜单中选择现有房间；若没有目标房间，可先从首页右上角“+”菜单创建。该选择只随已配对的注册请求发送，不写入 JWS 设备身份证书。因此同一张二维码可以在删除设备后重新添加到另一个房间。早期二维码即使仍带有 `roomId`，新 App 也会忽略该字段并使用用户当前选择。
 
 ## 网关必须完成的校验
 
 App 只做格式校验；可信性由已配对网关完成。`POST /api/v1/devices/register` 应当：
 
 1. 验证 TLS 会话与 App 的 Bearer credential。
-2. 验证静态设备身份证书 JWS 的签名、签发者、受众，并确认 JWS claims 与 `deviceId`、`deviceName`、`deviceType`、`categoryId`、`roomId`、`capabilities` 完全一致。证书没有有效期和一次性 `jti`，重复扫描同一设备是幂等的。
-3. 将接入验证交给对应设备适配器：适配器必须确认类型、功能分类、全部 capability 均被设备接受且设备在线；失败时不得把设备放入快照。
-4. 成功时返回 `{ "deviceId": "...", "accepted": true, "online": true }`，再把设备写入 `/api/v1/devices` 快照。VirtualGateway 对二维码注册的灯光还会标记为可移除，可由 App 调用 `DELETE /api/v1/devices/{deviceId}` 移除。
+2. 验证静态设备身份证书 JWS 的签名、签发者、受众，并确认 JWS claims 与 `deviceId`、`deviceName`、`deviceType`、`categoryId`、`capabilities` 完全一致。证书没有有效期和一次性 `jti`，重复扫描同一设备是幂等的。
+3. 校验 App 选择的目标 `roomId` 是网关当前已有的房间，再将接入验证交给对应设备适配器：适配器必须确认类型、功能分类、全部 capability 均被设备接受且设备在线；失败时不得把设备放入快照。
+4. 成功时返回 `{ "deviceId": "...", "accepted": true, "online": true }`，再把设备写入 `/api/v1/devices` 快照。所有二维码注册设备都会标记为可移除，可由 App 调用 `DELETE /api/v1/devices/{deviceId}` 移除。
 
-App 收到成功回执后会拉取最新快照，并再次比对设备序列号、名称、所属房间、类型、功能分类和所有能力接口；任何不一致都会被视为注册失败。
+App 收到成功回执后会拉取最新快照，并再次比对设备序列号、名称、所选房间、类型、功能分类和所有能力接口；任何不一致都会被视为注册失败。
 
 私钥、JWS 签发接口和网关认证材料不得写入本目录或二维码生成命令历史。真实硬件接入时，设备适配器应进一步用设备私钥对网关随机挑战签名；本项目的虚拟灯驱动以本地在线能力探测模拟这一环节。
 
@@ -84,7 +82,6 @@ python .\generation_device_qr.py `
   --device-name "浴室环境监测器" `
   --device-type environment `
   --category-id environment `
-  --room-id bathroom `
   --capabilities reportTemperature,reportHumidity,reportIlluminance,reportPresence `
   --admin-token '<VirtualGateway 启动日志中的令牌>'
 ```
@@ -97,7 +94,6 @@ python .\generation_device_qr.py `
   --device-name "浴室空调" `
   --device-type airConditioner `
   --category-id environment `
-  --room-id bathroom `
   --capabilities setPower,setMode,setTemperature,setFanSpeed,setDehumidify,setBrand `
   --admin-token '<VirtualGateway 启动日志中的令牌>'
 
@@ -106,7 +102,6 @@ python .\generation_device_qr.py `
   --device-name "浴室加湿器" `
   --device-type humidifier `
   --category-id environment `
-  --room-id bathroom `
   --capabilities setPower,setTargetHumidity `
   --admin-token '<VirtualGateway 启动日志中的令牌>'
 ```
