@@ -3,8 +3,10 @@ import {
   DeviceType,
   LightDevice,
   parseDevice,
-  parseDevices
+  parseDevices,
+  serializeDevice
 } from '../main/ets/model/DeviceModel';
+import { GenericDevice } from '../main/ets/model/GenericDeviceModel';
 
 function makeLightSnapshot(): Record<string, Object> {
   const automation: Record<string, Object> = {};
@@ -26,6 +28,44 @@ function makeLightSnapshot(): Record<string, Object> {
   raw['automation'] = automation;
   return raw;
 }
+function makeCurtainSnapshot(): Record<string, Object> {
+  const category: Record<string, Object> = {
+    'id': 'curtains',
+    'title': '窗帘',
+    'icon': '🪟',
+    'homeOnly': false
+  };
+  const state: Record<string, Object> = {
+    'positionPercent': 30,
+    'targetPositionPercent': 60,
+    'movement': 'opening'
+  };
+  const slider: Record<string, Object> = {
+    'id': 'position',
+    'kind': 'slider',
+    'label': '开合度',
+    'action': 'setPosition',
+    'stateKey': 'positionPercent',
+    'payloadKey': 'positionPercent',
+    'minimum': 0,
+    'maximum': 100,
+    'step': 1,
+    'unit': '%',
+    'primary': true
+  };
+  return {
+    'id': 'curtain-living-01',
+    'name': '客厅智能窗帘',
+    'roomId': 'living',
+    'type': 'curtain',
+    'online': true,
+    'stateVersion': 3,
+    'updatedAt': '2026-07-18T00:00:00+00:00',
+    'category': category,
+    'state': state,
+    'controls': [slider]
+  };
+}
 
 export default function localUnitTest() {
   describe('DeviceModelContract', () => {
@@ -45,6 +85,40 @@ export default function localUnitTest() {
         rejected = true;
       }
       expect(rejected).assertTrue();
+    });
+    it('parses, validates and serializes generic capability devices', 0, () => {
+      const parsed = parseDevice(makeCurtainSnapshot()) as GenericDevice;
+      expect(parsed.type).assertEqual('curtain');
+      expect(parsed.controls.length).assertEqual(1);
+      expect(parsed.state['positionPercent'] as number).assertEqual(30);
+
+      const serialized = serializeDevice(parsed);
+      const state = serialized['state'] as Record<string, Object>;
+      expect(state['targetPositionPercent'] as number).assertEqual(60);
+    });
+
+    it('isolates malformed optional generic devices in a snapshot', 0, () => {
+      const malformed: Record<string, Object> = {
+        'id': 'broken-device',
+        'name': '损坏设备',
+        'roomId': 'living',
+        'type': 'futureDevice'
+      };
+      const parsed = parseDevices([makeCurtainSnapshot(), malformed]);
+      expect(parsed.length).assertEqual(1);
+      expect(parsed[0].type).assertEqual('curtain');
+    });
+
+    it('rejects unsafe state keys and invalid slider ranges', 0, () => {
+      const invalidState = makeCurtainSnapshot();
+      const state = invalidState['state'] as Record<string, Object>;
+      state['unsafe key'] = 1;
+      expect(parseDevices([invalidState]).length).assertEqual(0);
+
+      const invalidSlider = makeCurtainSnapshot();
+      const controls = invalidSlider['controls'] as Record<string, Object>[];
+      controls[0]['step'] = 0;
+      expect(parseDevices([invalidSlider]).length).assertEqual(0);
     });
   });
 }

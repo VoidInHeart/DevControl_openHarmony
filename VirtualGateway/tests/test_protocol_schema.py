@@ -64,9 +64,7 @@ def test_pair_response_matches_shared_schema(tmp_path: Path) -> None:
         )
     )
     try:
-        response = gateway.sessions.pair(
-            "127.0.0.1", "schema-client-0001", "123456"
-        )
+        response = gateway.sessions.pair("127.0.0.1", "schema-client-0001", "123456")
         validator().validate(response.model_dump())
     finally:
         gateway.storage.close()
@@ -91,10 +89,52 @@ def test_gateway_events_match_shared_schema(tmp_path: Path) -> None:
                 "timestamp": now_ms(),
             }
         )
-        gateway.devices.inject_fault(
-            "door-entry-01", {"batteryPercent": 10}
-        )
+        gateway.devices.inject_fault("door-entry-01", {"batteryPercent": 10})
         for alert in gateway.devices.drain_alerts():
             contract.validate(alert)
+    finally:
+        gateway.storage.close()
+
+
+def test_generic_device_schema_rejects_unsafe_control_descriptors(
+    tmp_path: Path,
+) -> None:
+    gateway = GatewayService(
+        GatewayConfig(
+            database=tmp_path / "generic-schema.db",
+            initial_pairing_code="123456",
+            enable_background_tasks=False,
+        )
+    )
+    try:
+        contract = validator()
+        curtain = next(
+            item for item in gateway.devices.snapshot() if item["type"] == "curtain"
+        )
+
+        invalid_action = json.loads(json.dumps(curtain))
+        invalid_action["controls"][0]["action"] = "set position"
+        assert not contract.is_valid(invalid_action)
+
+        missing_slider_key = json.loads(json.dumps(curtain))
+        del missing_slider_key["controls"][0]["payloadKey"]
+        assert not contract.is_valid(missing_slider_key)
+
+        invalid_state_key = json.loads(json.dumps(curtain))
+        invalid_state_key["state"]["unsafe key"] = 1
+        assert not contract.is_valid(invalid_state_key)
+
+        invalid_slider_range = json.loads(json.dumps(curtain))
+        invalid_slider_range["controls"][0]["step"] = 0
+        assert not contract.is_valid(invalid_slider_range)
+
+        invalid_enum_options = json.loads(json.dumps(curtain))
+        invalid_enum_options["controls"][0]["kind"] = "enum"
+        invalid_enum_options["controls"][0]["options"] = []
+        assert not contract.is_valid(invalid_enum_options)
+
+        nested_state = json.loads(json.dumps(curtain))
+        nested_state["state"]["unsafe"] = {"nested": True}
+        assert not contract.is_valid(nested_state)
     finally:
         gateway.storage.close()
