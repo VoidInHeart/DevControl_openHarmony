@@ -77,7 +77,6 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--device-name", required=True, help="Human-readable device display name")
     parser.add_argument("--device-type", required=True, help="Device adapter type, e.g. curtain")
     parser.add_argument("--category-id", required=True, help="DevControl feature category, e.g. curtains")
-    parser.add_argument("--room-id", required=True, help="Stable room identifier, e.g. living")
     parser.add_argument(
         "--capabilities",
         required=True,
@@ -170,7 +169,6 @@ def main() -> int:
             "deviceName": device_name(args.device_name),
             "deviceType": identifier(args.device_type, "device-type"),
             "categoryId": identifier(args.category_id, "category-id"),
-            "roomId": identifier(args.room_id, "room-id"),
             "capabilities": capabilities(args.capabilities),
         }
         proof_declaration = {

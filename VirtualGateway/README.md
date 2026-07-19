@@ -49,7 +49,6 @@ python .\generation_device_qr.py `
   --device-name "浴室智能灯" `
   --device-type light `
   --category-id lighting `
-  --room-id bathroom `
   --capabilities setPower,setBrightness,setAutomationConfig `
   --admin-token '<启动日志中的 X-Admin-Token>'
 ```

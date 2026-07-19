@@ -125,6 +125,8 @@ class DeviceRegistry:
         category_id: str,
         capabilities: list[str],
     ) -> dict[str, Any]:
+        if not any(device.get("roomId") == room_id for device in self.devices.values()):
+            raise GatewayError(INVALID_COMMAND, "目标房间不存在")
         driver = self.drivers.get(device_type)
         if driver is None:
             raise GatewayError(INVALID_COMMAND, "设备类型未注册")

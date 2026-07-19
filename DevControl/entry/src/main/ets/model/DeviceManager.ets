@@ -329,7 +329,7 @@ export class DeviceManager implements GatewayTransportListener {
         return result;
       }
       if (device.roomId !== request.roomId) {
-        result.message = '网关返回的所属房间与二维码不一致';
+        result.message = '网关返回的所属房间与所选房间不一致';
         return result;
       }
       if (device.type !== request.deviceType) {

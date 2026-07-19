@@ -16,6 +16,8 @@ export class DeviceRegistrationRequest {
   deviceName: string = '';
   deviceType: string = '';
   categoryId: string = '';
+  // This is selected in the App during registration. It is intentionally not
+  // part of the QR payload or the signed device identity certificate.
   roomId: string = '';
   capabilities: string[] = [];
   gatewayProofFormat: string = 'jws';
@@ -103,7 +105,6 @@ export class DeviceRegistrationQr {
     request.deviceName = DeviceRegistrationQr.requireDeviceName(raw);
     request.deviceType = DeviceRegistrationQr.requireIdentifier(raw, 'deviceType');
     request.categoryId = DeviceRegistrationQr.requireIdentifier(raw, 'categoryId');
-    request.roomId = DeviceRegistrationQr.requireIdentifier(raw, 'roomId');
     request.capabilities = DeviceRegistrationQr.requireIdentifiers(raw, 'capabilities', 1, 32);
     request.gatewayProofFormat = DeviceRegistrationQr.requireString(raw, 'gatewayProofFormat', 16);
     if (request.gatewayProofFormat !== 'jws') {

@@ -9,12 +9,17 @@ import {
   DeviceRegistrationRequest
 } from '../service/DeviceRegistration';
 
+class RoomSelectOption {
+  value: string = '';
+}
+
 @Entry
 @Component
 struct AddDevice {
   @Provide deviceManager: DeviceManager = DeviceApplication.getDeviceManager();
   @State selectedImageUri: string = '';
   @State registrationRequest: DeviceRegistrationRequest | null = null;
+  @State selectedRoomId: string = '';
   @State isRecognizing: boolean = false;
   @State isRegistering: boolean = false;
   @State isRedirecting: boolean = false;
@@ -92,7 +97,7 @@ struct AddDevice {
         .fontSize(21)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14263A')
-      Text('二维码只携带设备声明与网关签名证明；设备会由已配对网关验证、探测并同步。')
+      Text('二维码只携带设备声明与网关签名证明；请选择添加房间后，由已配对网关验证、探测并同步。')
         .fontSize(13)
         .fontColor('#617287')
         .lineHeight(20)
@@ -205,7 +210,7 @@ struct AddDevice {
       this.SummaryRow('设备名称', this.requestDeviceName())
       this.SummaryRow('设备类型', this.requestDeviceType())
       this.SummaryRow('功能分类', this.requestCategoryId())
-      this.SummaryRow('所属房间', this.requestRoomId())
+      this.RoomSelectionRow()
       this.SummaryRow('能力接口', this.requestCapabilities())
       Text('网关认证证明已读取，将由已配对网关完成签名验证。')
         .fontSize(12)
@@ -223,12 +228,19 @@ struct AddDevice {
         .fontColor(Color.White)
         .backgroundColor('#1769C2')
         .borderRadius(16)
-        .enabled(!this.isRegistering && !this.isRedirecting && this.deviceManager.isOnline())
+        .enabled(!this.isRegistering && !this.isRedirecting && this.deviceManager.isOnline() &&
+          this.hasSelectedRoom())
         .onClick(() => {
           this.registerRecognizedDevice();
         })
       if (!this.deviceManager.isOnline()) {
         Text('请先连接已配对网关，再验证设备。')
+          .fontSize(12)
+          .fontColor('#B54747')
+          .margin({ top: 8 })
+      }
+      if (this.deviceManager.isOnline() && !this.hasSelectedRoom()) {
+        Text('当前没有可选择的房间，请先同步网关设备快照。')
           .fontSize(12)
           .fontColor('#B54747')
           .margin({ top: 8 })
@@ -261,11 +273,47 @@ struct AddDevice {
     .border({ width: { bottom: 1 }, color: '#EDF1F5' })
   }
 
+  @Builder
+  RoomSelectionRow() {
+    Row() {
+      Text('添加至房间')
+        .fontSize(13)
+        .fontColor('#748294')
+        .width(92)
+      if (this.selectableRoomIds().length > 0) {
+        Select(this.roomSelectionOptions())
+          .id('add-device-room-select')
+          .selected(this.selectedRoomIndex())
+          .font({ size: 13, weight: FontWeight.Medium })
+          .fontColor('#1769C2')
+          .width(176)
+          .backgroundColor('#EAF4FF')
+          .borderRadius(10)
+          .onSelect((index: number) => {
+            const roomIds = this.selectableRoomIds();
+            if (index >= 0 && index < roomIds.length) {
+              this.selectedRoomId = roomIds[index];
+            }
+          })
+      } else {
+        Text('暂无可用房间')
+          .fontSize(13)
+          .fontColor('#B54747')
+          .layoutWeight(1)
+          .textAlign(TextAlign.End)
+      }
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 8 })
+    .border({ width: { bottom: 1 }, color: '#EDF1F5' })
+  }
+
   private async selectQrFromGallery(): Promise<void> {
     this.cancelRoomNavigation();
     this.isRedirecting = false;
     this.statusMessage = '';
     this.registrationRequest = null;
+    this.selectedRoomId = '';
     const options = new photoAccessHelper.PhotoSelectOptions();
     options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
     options.maxSelectNumber = 1;
@@ -283,8 +331,9 @@ struct AddDevice {
         return;
       }
       this.registrationRequest = DeviceRegistrationQr.parse(scanResults[0].originalValue);
+      this.selectedRoomId = this.defaultSelectedRoomId();
       this.statusIsError = false;
-      this.statusMessage = '已读取设备声明，请连接网关后继续验证。';
+      this.statusMessage = '已读取设备声明，请选择添加房间后继续验证。';
     } catch (error) {
       const message = error instanceof Error && error.message.length > 0 ?
         error.message : '无法读取所选图片中的二维码';
@@ -299,6 +348,11 @@ struct AddDevice {
     if (request === null) {
       return;
     }
+    if (!this.hasSelectedRoom()) {
+      this.showError('请选择设备要添加到的房间。');
+      return;
+    }
+    request.roomId = this.selectedRoomId;
     this.isRegistering = true;
     this.isRedirecting = false;
     this.statusMessage = '';
@@ -307,8 +361,8 @@ struct AddDevice {
       this.statusIsError = !result.registered;
       if (result.registered) {
         this.statusMessage = '设备已添加，将在 1.5 秒后进入' +
-          DeviceRegistry.getRoomLabel(request.roomId);
-        this.scheduleRoomNavigation(request.roomId);
+          DeviceRegistry.getRoomLabel(this.selectedRoomId);
+        this.scheduleRoomNavigation(this.selectedRoomId);
       } else {
         this.statusMessage = result.message;
       }
@@ -355,11 +409,44 @@ struct AddDevice {
     return this.registrationRequest === null ? '' : this.registrationRequest.categoryId;
   }
 
-  private requestRoomId(): string {
-    return this.registrationRequest === null ? '' : this.registrationRequest.roomId;
-  }
-
   private requestCapabilities(): string {
     return this.registrationRequest === null ? '' : this.registrationRequest.capabilities.join('、');
+  }
+
+  private selectableRoomIds(): string[] {
+    const allRoomIds = this.deviceManager.getRoomIds();
+    const result: string[] = [];
+    for (let index = 0; index < allRoomIds.length; index++) {
+      const roomId = allRoomIds[index];
+      if (this.deviceManager.getDevicesByRoom(roomId).length > 0) {
+        result.push(roomId);
+      }
+    }
+    return result;
+  }
+
+  private roomSelectionOptions(): RoomSelectOption[] {
+    const roomIds = this.selectableRoomIds();
+    const options: RoomSelectOption[] = [];
+    for (let index = 0; index < roomIds.length; index++) {
+      const option = new RoomSelectOption();
+      option.value = DeviceRegistry.getRoomLabel(roomIds[index]);
+      options.push(option);
+    }
+    return options;
+  }
+
+  private selectedRoomIndex(): number {
+    const index = this.selectableRoomIds().indexOf(this.selectedRoomId);
+    return index >= 0 ? index : 0;
+  }
+
+  private defaultSelectedRoomId(): string {
+    const roomIds = this.selectableRoomIds();
+    return roomIds.length > 0 ? roomIds[0] : '';
+  }
+
+  private hasSelectedRoom(): boolean {
+    return this.selectableRoomIds().indexOf(this.selectedRoomId) >= 0;
   }
 }
