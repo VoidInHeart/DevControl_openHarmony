@@ -23,6 +23,8 @@ export struct ControlCenterTab {
   @State showMetricSheet: boolean = false;
   @State showAddMenu: boolean = false;
   @State activeMetric: string = '';
+  @State showHumidifierControl: boolean = false;
+  @State activeHumidifierId: string = '';
   private roomSegmentsScroller: Scroller = new Scroller();
 
   build() {
@@ -62,6 +64,14 @@ export struct ControlCenterTab {
     .width('100%')
     .layoutWeight(1)
     .backgroundColor('#DCEAF2')
+    .bindContentCover(this.showHumidifierControl, this.HumidifierControlCover(), {
+      backgroundColor: '#DCEAF2',
+      modalTransition: ModalTransition.DEFAULT,
+      onDisappear: () => {
+        this.showHumidifierControl = false;
+        this.activeHumidifierId = '';
+      }
+    })
     .bindSheet(this.showMetricSheet, this.MetricSheet(), {
       height: '70%',
       dragBar: true,
@@ -78,7 +88,7 @@ export struct ControlCenterTab {
     Stack({ alignContent: Alignment.TopEnd }) {
       Row() {
         Column() {
-          Text('DevControl 的家')
+          Text('DevControl')
             .fontSize(30)
             .fontWeight(FontWeight.Bold)
             .fontColor('#14263A')
@@ -183,6 +193,215 @@ export struct ControlCenterTab {
     .width('100%')
     .margin({ bottom: 10 })
     .zIndex(10)
+  }
+
+  @Builder
+  HumidifierControlCover() {
+    Column() {
+      Row() {
+        Column() {
+          Text('加湿器控制')
+            .fontSize(26)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text('调节设备开关与目标湿度')
+            .fontSize(13)
+            .fontColor('#748294')
+            .margin({ top: 5 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Stack({ alignContent: Alignment.Center }) {
+          Text('×')
+            .fontSize(30)
+            .fontColor('#14263A')
+            .width('100%')
+            .height('100%')
+            .lineHeight(46)
+            .textAlign(TextAlign.Center)
+            .translate({ y: -1 })
+        }
+        .id('humidifier-control-close')
+        .width(46)
+        .height(46)
+        .backgroundColor('#F7FBFF')
+        .borderRadius(23)
+        .onClick(() => {
+          this.showHumidifierControl = false;
+        })
+      }
+      .width('100%')
+
+      if (this.activeHumidifier() === null) {
+        Column() {
+          Text('设备不可用')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text('该加湿器可能已离线或被移除')
+            .fontSize(13)
+            .fontColor('#748294')
+            .margin({ top: 8 })
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      } else {
+        this.HumidifierControlPanel(this.activeHumidifier() as GenericDevice)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 20, right: 20, top: 42, bottom: 28 })
+    .backgroundColor('#DCEAF2')
+  }
+
+  @Builder
+  HumidifierControlPanel(device: GenericDevice) {
+    Scroll() {
+      Column() {
+        Row() {
+          Stack({ alignContent: Alignment.Center }) {
+            Image($r('app.media.device_environment'))
+              .width(32)
+              .height(32)
+              .objectFit(ImageFit.Contain)
+          }
+          .width(62)
+          .height(62)
+          .backgroundColor('#E8F8F3')
+          .borderRadius(21)
+          Column() {
+            Text(device.name)
+              .fontSize(21)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#14263A')
+            Text(this.humidifierStatus(device))
+              .fontSize(13)
+              .fontColor(this.isHumidifierOnline(device) ? '#0F8F66' : '#D64545')
+              .margin({ top: 5 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          .margin({ left: 14 })
+          Text(this.isHumidifierOnline(device) ? '在线' : '离线')
+            .fontSize(12)
+            .fontColor(this.isHumidifierOnline(device) ? '#0F8F66' : '#D64545')
+            .padding({ left: 11, right: 11, top: 6, bottom: 6 })
+            .backgroundColor(this.isHumidifierOnline(device) ? '#EAF8F1' : '#FFF1F1')
+            .borderRadius(14)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Divider()
+          .color('#E6EDF3')
+          .margin({ top: 20, bottom: 20 })
+
+        Row() {
+          Column() {
+            Text('电源开关')
+              .fontSize(17)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#14263A')
+            Text(this.genericPower(device) ? '加湿器正在运行' : '加湿器已关闭')
+              .fontSize(12)
+              .fontColor('#748294')
+              .margin({ top: 5 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.genericPower(device) })
+            .id('humidifier-control-power')
+            .enabled(this.canControlDevice(device))
+            .opacity(this.canControlDevice(device) ? 1 : 0.45)
+            .selectedColor('#0F8F66')
+            .onChange((power: boolean) => {
+              this.setGenericPower(device, power);
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Column() {
+          Row() {
+            Column() {
+              Text('目标湿度')
+                .fontSize(17)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text('建议范围 40%–60%')
+                .fontSize(12)
+                .fontColor('#748294')
+                .margin({ top: 5 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text(this.humidifierTarget(device).toFixed(0) + '%')
+              .fontSize(30)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#0F8F66')
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+
+          Slider({
+            value: this.humidifierTarget(device),
+            min: 35,
+            max: 75,
+            step: 1,
+            style: SliderStyle.OutSet
+          })
+            .id('humidifier-control-target')
+            .width('100%')
+            .enabled(this.canControlDevice(device))
+            .opacity(this.canControlDevice(device) ? 1 : 0.45)
+            .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+            .selectedColor('#0F8F66')
+            .margin({ top: 18 })
+            .onChange((value: number, mode: SliderChangeMode) => {
+              if (this.shouldCommitSlider(mode)) {
+                this.setHumidifierTarget(device, value);
+              }
+            })
+
+          Row() {
+            Text('35%')
+              .fontSize(11)
+              .fontColor('#748294')
+            Blank()
+            Text('75%')
+              .fontSize(11)
+              .fontColor('#748294')
+          }
+          .width('100%')
+          .margin({ top: 4 })
+        }
+        .width('100%')
+        .margin({ top: 22 })
+
+        if (this.deviceManager.isDevicePending(device.id)) {
+          Text('设置正在同步到设备…')
+            .fontSize(12)
+            .fontColor('#8A5A00')
+            .width('100%')
+            .padding(12)
+            .backgroundColor('#FFF3D6')
+            .borderRadius(14)
+            .margin({ top: 20 })
+        }
+      }
+      .width('100%')
+      .padding(20)
+      .backgroundColor('#F7FBFF')
+      .borderRadius(26)
+      .visualEffect(immersiveCardEffect())
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .margin({ top: 22 })
+    .scrollBar(BarState.Off)
   }
 
   @Builder
@@ -834,6 +1053,11 @@ export struct ControlCenterTab {
             LockIcon({ locked: true, iconSize: 26 })
           } else if (feature.id === 'curtains') {
             CurtainIcon({ iconSize: 32 })
+          } else if (feature.id === 'environment') {
+            Image($r('app.media.device_environment'))
+              .width(30)
+              .height(30)
+              .objectFit(ImageFit.Contain)
           } else {
             Text(feature.icon)
               .fontSize(34)
@@ -918,10 +1142,15 @@ export struct ControlCenterTab {
     .alignItems(VerticalAlign.Center)
     .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .onClick(() => {
-      router.pushUrl({
-        url: 'pages/DeviceDetail',
-        params: { deviceId: device.id }
-      });
+      if (device.type === 'humidifier') {
+        this.activeHumidifierId = device.id;
+        this.showHumidifierControl = true;
+      } else {
+        router.pushUrl({
+          url: 'pages/DeviceDetail',
+          params: { deviceId: device.id }
+        });
+      }
     })
   }
 
@@ -938,6 +1167,11 @@ export struct ControlCenterTab {
           .height(badgeSize - 22)
           .objectFit(ImageFit.Contain)
       } else if (device.type === DeviceType.ENVIRONMENT) {
+        Image($r('app.media.device_environment'))
+          .width(badgeSize - 22)
+          .height(badgeSize - 22)
+          .objectFit(ImageFit.Contain)
+      } else if (this.isEnvironmentCategoryDevice(device)) {
         Image($r('app.media.device_environment'))
           .width(badgeSize - 22)
           .height(badgeSize - 22)
@@ -1055,6 +1289,37 @@ export struct ControlCenterTab {
     const payload: CommandPayload = {};
     payload['power'] = power;
     this.deviceManager.executeDeviceAction(device, 'setPower', payload);
+  }
+
+  private setHumidifierTarget(device: GenericDevice, targetHumidityPercent: number): void {
+    const payload: CommandPayload = {};
+    payload['targetHumidityPercent'] = Math.round(targetHumidityPercent);
+    this.deviceManager.executeDeviceAction(device, 'setTargetHumidity', payload);
+  }
+
+  private activeHumidifier(): GenericDevice | null {
+    const device = this.deviceManager.getDeviceById(this.activeHumidifierId);
+    if (device === null || device.type !== 'humidifier') {
+      return null;
+    }
+    return device as GenericDevice;
+  }
+
+  private humidifierStatus(device: GenericDevice): string {
+    if (!this.deviceManager.isOnline()) {
+      return '网关离线';
+    }
+    if (!device.online) {
+      return '设备离线';
+    }
+    if (this.deviceManager.isDevicePending(device.id)) {
+      return '正在同步设置';
+    }
+    return this.genericPower(device) ? '正在加湿' : '已关闭';
+  }
+
+  private isHumidifierOnline(device: GenericDevice): boolean {
+    return this.deviceManager.isOnline() && device.online;
   }
 
   private activeLights(): LightDevice[] {
@@ -1231,6 +1496,11 @@ export struct ControlCenterTab {
       (device as GenericDevice).category.id === 'curtains';
   }
 
+  private isEnvironmentCategoryDevice(device: DeviceInfo): boolean {
+    return DeviceRegistry.getCapability(device.type) === null &&
+      (device as GenericDevice).category.id === 'environment';
+  }
+
   private deviceSummary(device: DeviceInfo): string {
     if (!device.online) {
       return '设备离线';
@@ -1277,7 +1547,7 @@ export struct ControlCenterTab {
   }
 
   private headerSubtitle(): string {
-    return '全屋设备已连接 · ' + this.deviceManager.getConnectionLabel();
+    return this.deviceManager.getConnectionLabel();
   }
 
   private averageTemperature(): string {

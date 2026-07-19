@@ -483,14 +483,14 @@ export struct TemperatureTab {
   HumidifierCard(device: GenericDevice) {
     Column() {
       Row() {
-        Text('≈')
-          .fontSize(34)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#0F8F66')
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.device_environment'))
+            .width(30)
+            .height(30)
+            .objectFit(ImageFit.Contain)
+        }
           .width(56)
           .height(56)
-          .lineHeight(52)
-          .textAlign(TextAlign.Center)
           .backgroundColor('#E8F8F3')
           .borderRadius(20)
         Column() {
