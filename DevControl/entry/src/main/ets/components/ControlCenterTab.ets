@@ -1,6 +1,8 @@
 import { router } from '@kit.ArkUI';
 import {
+  ACMode,
   AirConditionerDevice,
+  CommandPayload,
   DeviceInfo,
   DeviceType,
   DoorLockDevice,
@@ -439,22 +441,114 @@ export struct ControlCenterTab {
           .width('100%')
           .margin({ top: 8 })
       }, (device: EnvironmentDevice) => device.id + ':' + device.stateVersion.toString())
-      Column() {
-        Text('加湿器控制（预留）')
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#14263A')
-        Text('接入加湿器模块后，这里将自动显示开关、目标湿度和模式控制。')
-          .fontSize(13)
-          .fontColor('#748294')
+      this.HumidityDeviceControls()
+    }
+    .width('100%')
+  }
+
+  @Builder
+  HumidityDeviceControls() {
+    Column() {
+      Text('除湿空调')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+        .width('100%')
+        .margin({ top: 22, bottom: 12 })
+      if (this.scopedAirConditioners().length === 0) {
+        this.SheetEmptyState('当前范围暂无可用空调')
+      } else {
+        ForEach(this.scopedAirConditioners(), (device: AirConditionerDevice) => {
+          Row() {
+            Text('❄')
+              .fontSize(23)
+              .fontColor('#1769C2')
+              .width(46)
+              .height(46)
+              .lineHeight(46)
+              .textAlign(TextAlign.Center)
+              .backgroundColor('#EAF4FF')
+              .borderRadius(15)
+            Column() {
+              Text(device.name)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text(this.isDehumidifying(device) ? '除湿中' : '关闭')
+                .fontSize(12)
+                .fontColor('#748294')
+                .margin({ top: 4 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            Toggle({ type: ToggleType.Switch, isOn: this.isDehumidifying(device) })
+              .enabled(this.canControlDevice(device))
+              .opacity(this.canControlDevice(device) ? 1 : 0.45)
+              .selectedColor('#1769C2')
+              .onChange((isOn: boolean) => {
+                this.deviceManager.setAcDehumidify(device, isOn);
+              })
+          }
           .width('100%')
-          .margin({ top: 6 })
+          .padding(14)
+          .borderRadius(20)
+          .backgroundColor('#F7FBFF')
+          .margin({ bottom: 10 })
+          .alignItems(VerticalAlign.Center)
+        }, (device: AirConditionerDevice) => device.id + ':' + device.stateVersion.toString())
       }
-      .width('100%')
-      .padding(18)
-      .borderRadius(20)
-      .backgroundColor('#EEF9F4')
-      .margin({ top: 22 })
+
+      Text('加湿器')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+        .width('100%')
+        .margin({ top: 12, bottom: 12 })
+      if (this.scopedHumidifiers().length === 0) {
+        this.SheetEmptyState('当前范围暂无可用加湿器')
+      } else {
+        ForEach(this.scopedHumidifiers(), (device: GenericDevice) => {
+          Row() {
+            Text('≈')
+              .fontSize(28)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#0F8F66')
+              .width(46)
+              .height(46)
+              .lineHeight(43)
+              .textAlign(TextAlign.Center)
+              .backgroundColor('#E8F8F3')
+              .borderRadius(15)
+            Column() {
+              Text(device.name)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text('目标湿度 ' + this.humidifierTarget(device).toFixed(0) + '%')
+                .fontSize(12)
+                .fontColor('#748294')
+                .margin({ top: 4 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            Toggle({ type: ToggleType.Switch, isOn: this.genericPower(device) })
+              .enabled(this.canControlDevice(device))
+              .opacity(this.canControlDevice(device) ? 1 : 0.45)
+              .selectedColor('#0F8F66')
+              .onChange((isOn: boolean) => {
+                this.setGenericPower(device, isOn);
+              })
+          }
+          .width('100%')
+          .padding(14)
+          .borderRadius(20)
+          .backgroundColor('#F7FBFF')
+          .margin({ bottom: 10 })
+          .alignItems(VerticalAlign.Center)
+        }, (device: GenericDevice) => device.id + ':' + device.stateVersion.toString())
+      }
     }
     .width('100%')
   }
@@ -816,6 +910,37 @@ export struct ControlCenterTab {
       }
     }
     return result;
+  }
+
+  private scopedHumidifiers(): GenericDevice[] {
+    const result: GenericDevice[] = [];
+    const devices = this.scopedDevices();
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].type === 'humidifier') {
+        result.push(devices[index] as GenericDevice);
+      }
+    }
+    return result;
+  }
+
+  private isDehumidifying(device: AirConditionerDevice): boolean {
+    return device.state.power && device.state.mode === ACMode.DRY;
+  }
+
+  private genericPower(device: GenericDevice): boolean {
+    const value = device.state['power'];
+    return typeof value === 'boolean' && value;
+  }
+
+  private humidifierTarget(device: GenericDevice): number {
+    const value = device.state['targetHumidityPercent'];
+    return typeof value === 'number' ? value : 55;
+  }
+
+  private setGenericPower(device: GenericDevice, power: boolean): void {
+    const payload: CommandPayload = {};
+    payload['power'] = power;
+    this.deviceManager.executeDeviceAction(device, 'setPower', payload);
   }
 
   private activeLights(): LightDevice[] {

@@ -437,6 +437,12 @@ export class DeviceManager implements GatewayTransportListener {
     await this.submit(device, 'setMode', payload);
   }
 
+  async setAcDehumidify(device: AirConditionerDevice, enabled: boolean): Promise<void> {
+    const payload: CommandPayload = {};
+    payload['enabled'] = enabled;
+    await this.submit(device, 'setDehumidify', payload);
+  }
+
   async setAcTemperature(device: AirConditionerDevice, temperature: number): Promise<void> {
     const payload: CommandPayload = {};
     payload['temperatureCelsius'] = Math.round(temperature);

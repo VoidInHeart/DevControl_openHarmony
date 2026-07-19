@@ -2,19 +2,34 @@ import {
   ACMode,
   ACFanSpeed,
   AirConditionerDevice,
+  CommandPayload,
   DeviceBrand,
   EnvironmentDevice,
   EnvironmentHistoryPoint
 } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { GenericDevice } from '../model/GenericDeviceModel';
 
 @Component
 export struct TemperatureTab {
   @Consume deviceManager: DeviceManager;
   @Prop deviceId: string = '';
   @Prop showTitle: boolean = true;
+  @State monitoringExpanded: boolean = true;
+  @State airConditionersExpanded: boolean = true;
+  @State humidifiersExpanded: boolean = true;
+  @State bathHeatersExpanded: boolean = true;
 
   build() {
+    if (this.deviceId.length > 0) {
+      this.DeviceDetailContent()
+    } else {
+      this.EnvironmentFeatureContent()
+    }
+  }
+
+  @Builder
+  DeviceDetailContent() {
     Scroll() {
       Column() {
         if (this.visibleEnvironmentDevices().length > 0) {
@@ -34,17 +49,168 @@ export struct TemperatureTab {
   }
 
   @Builder
-  EnvironmentSection() {
-    Column() {
-      if (this.showTitle) {
+  EnvironmentFeatureContent() {
+    List({ space: 10 }) {
+      ListItemGroup({ header: this.MonitoringGroupHeader }) {
+        if (this.monitoringExpanded) {
+          ListItem() {
+            this.EnvironmentSection()
+          }
+          ListItem() {
+            this.HistorySection()
+          }
+        }
+      }
+      ListItemGroup({ header: this.AirConditionerGroupHeader }) {
+        if (this.airConditionersExpanded) {
+          ForEach(this.visibleAirConditioners(), (device: AirConditionerDevice) => {
+            ListItem() {
+              this.AirConditionerCard(device)
+            }
+          }, (device: AirConditionerDevice) => device.id + ':' + device.stateVersion.toString())
+        }
+      }
+      ListItemGroup({ header: this.HumidifierGroupHeader }) {
+        if (this.humidifiersExpanded) {
+          ForEach(this.humidifiers(), (device: GenericDevice) => {
+            ListItem() {
+              this.HumidifierCard(device)
+            }
+          }, (device: GenericDevice) => device.id + ':' + device.stateVersion.toString())
+        }
+      }
+      ListItemGroup({ header: this.BathHeaterGroupHeader }) {
+        if (this.bathHeatersExpanded) {
+          ForEach(this.bathHeaters(), (device: GenericDevice) => {
+            ListItem() {
+              this.BathHeaterCard(device)
+            }
+          }, (device: GenericDevice) => device.id + ':' + device.stateVersion.toString())
+        }
+      }
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .padding(16)
+    .scrollBar(BarState.Auto)
+    .sticky(StickyStyle.Header)
+  }
+
+  @Builder
+  MonitoringGroupHeader() {
+    Row() {
+      Column() {
         Text('环境监测')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .width('100%')
-          .margin({ bottom: 12 })
+          .fontColor('#14263A')
+        Text(this.visibleEnvironmentDevices().length.toString() + ' 台设备')
+          .fontSize(12)
+          .fontColor('#748294')
+          .margin({ top: 2 })
       }
+      .alignItems(HorizontalAlign.Start)
+      Blank()
+      Text(this.monitoringExpanded ? '⌃' : '⌄')
+        .fontSize(22)
+        .fontColor('#748294')
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 10 })
+    .backgroundColor('#DCEAF2')
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.monitoringExpanded = !this.monitoringExpanded;
+    })
+  }
 
+  @Builder
+  AirConditionerGroupHeader() {
+    Row() {
+      Column() {
+        Text('空调')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+        Text(this.visibleAirConditioners().length.toString() + ' 台设备')
+          .fontSize(12)
+          .fontColor('#748294')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      Blank()
+      Text(this.airConditionersExpanded ? '⌃' : '⌄')
+        .fontSize(22)
+        .fontColor('#748294')
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 10 })
+    .backgroundColor('#DCEAF2')
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.airConditionersExpanded = !this.airConditionersExpanded;
+    })
+  }
+
+  @Builder
+  HumidifierGroupHeader() {
+    Row() {
+      Column() {
+        Text('加湿器')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+        Text(this.humidifiers().length.toString() + ' 台设备')
+          .fontSize(12)
+          .fontColor('#748294')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      Blank()
+      Text(this.humidifiersExpanded ? '⌃' : '⌄')
+        .fontSize(22)
+        .fontColor('#748294')
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 10 })
+    .backgroundColor('#DCEAF2')
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.humidifiersExpanded = !this.humidifiersExpanded;
+    })
+  }
+
+  @Builder
+  BathHeaterGroupHeader() {
+    Row() {
+      Column() {
+        Text('浴霸')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14263A')
+        Text(this.bathHeaters().length.toString() + ' 台设备')
+          .fontSize(12)
+          .fontColor('#748294')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      Blank()
+      Text(this.bathHeatersExpanded ? '⌃' : '⌄')
+        .fontSize(22)
+        .fontColor('#748294')
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 10 })
+    .backgroundColor('#DCEAF2')
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.bathHeatersExpanded = !this.bathHeatersExpanded;
+    })
+  }
+
+  @Builder
+  EnvironmentSection() {
+    Column() {
       ForEach(this.visibleEnvironmentDevices(), (sensor: EnvironmentDevice) => {
         Column() {
           Row() {
@@ -308,6 +474,147 @@ export struct TemperatureTab {
   }
 
   @Builder
+  HumidifierCard(device: GenericDevice) {
+    Column() {
+      Row() {
+        Text('≈')
+          .fontSize(34)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#0F8F66')
+          .width(56)
+          .height(56)
+          .lineHeight(52)
+          .textAlign(TextAlign.Center)
+          .backgroundColor('#E8F8F3')
+          .borderRadius(20)
+        Column() {
+          Text(device.name)
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text(this.genericPower(device) ? '正在加湿' : '已关闭')
+            .fontSize(12)
+            .fontColor('#748294')
+            .margin({ top: 5 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        .margin({ left: 12 })
+        Toggle({ type: ToggleType.Switch, isOn: this.genericPower(device) })
+          .enabled(this.canControlGeneric(device))
+          .selectedColor('#0F8F66')
+          .onChange((power: boolean) => {
+            this.setGenericPower(device, power);
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row() {
+        Text('目标湿度')
+          .fontSize(14)
+          .fontColor('#748294')
+        Blank()
+        Text(this.humidifierTarget(device).toFixed(0) + '%')
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#0F8F66')
+      }
+      .width('100%')
+      .margin({ top: 18, bottom: 8 })
+      Slider({
+        value: this.humidifierTarget(device),
+        min: 35,
+        max: 75,
+        step: 1,
+        style: SliderStyle.OutSet
+      })
+        .width('100%')
+        .enabled(this.canControlGeneric(device))
+        .selectedColor('#0F8F66')
+        .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+        .onChange((value: number, mode: SliderChangeMode) => {
+          if (this.shouldCommitSlider(mode)) {
+            this.setHumidifierTarget(device, value);
+          }
+        })
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(24)
+    .backgroundColor('#F7FBFF')
+    .margin({ bottom: 12 })
+  }
+
+  @Builder
+  BathHeaterCard(device: GenericDevice) {
+    Column() {
+      Row() {
+        Text('♨')
+          .fontSize(29)
+          .fontColor('#C86A25')
+          .width(56)
+          .height(56)
+          .lineHeight(56)
+          .textAlign(TextAlign.Center)
+          .backgroundColor('#FFF0E4')
+          .borderRadius(20)
+        Column() {
+          Text(device.name)
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text(this.genericPower(device) ? this.bathHeaterModeLabel(device) : '已关闭')
+            .fontSize(12)
+            .fontColor('#748294')
+            .margin({ top: 5 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        .margin({ left: 12 })
+        Toggle({ type: ToggleType.Switch, isOn: this.genericPower(device) })
+          .enabled(this.canControlGeneric(device))
+          .selectedColor('#C86A25')
+          .onChange((power: boolean) => {
+            this.setGenericPower(device, power);
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Text('运行模式')
+        .fontSize(14)
+        .fontColor('#748294')
+        .width('100%')
+        .margin({ top: 18, bottom: 8 })
+      Row() {
+        this.BathHeaterModeButton(device, '暖风', 'warm')
+        this.BathHeaterModeButton(device, '换气', 'ventilate')
+        this.BathHeaterModeButton(device, '干燥', 'dry')
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.SpaceBetween)
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(24)
+    .backgroundColor('#F7FBFF')
+    .margin({ bottom: 12 })
+  }
+
+  @Builder
+  BathHeaterModeButton(device: GenericDevice, label: string, mode: string) {
+    Button(label)
+      .fontSize(13)
+      .fontColor(this.bathHeaterMode(device) === mode ? '#C86A25' : '#14263A')
+      .backgroundColor(this.bathHeaterMode(device) === mode ? '#FFF0E4' : Color.White)
+      .enabled(this.canControlGeneric(device))
+      .onClick(() => {
+        this.setBathHeaterMode(device, mode);
+      })
+  }
+
+  @Builder
   PendingBadge() {
     Row() {
       Text('•')
@@ -366,6 +673,55 @@ export struct TemperatureTab {
   private canControl(device: AirConditionerDevice): boolean {
     return this.deviceManager.isOnline() && device.online &&
       !this.deviceManager.isDevicePending(device.id);
+  }
+
+  private canControlGeneric(device: GenericDevice): boolean {
+    return this.deviceManager.isOnline() && device.online &&
+      !this.deviceManager.isDevicePending(device.id);
+  }
+
+  private genericPower(device: GenericDevice): boolean {
+    const value = device.state['power'];
+    return typeof value === 'boolean' && value;
+  }
+
+  private humidifierTarget(device: GenericDevice): number {
+    const value = device.state['targetHumidityPercent'];
+    return typeof value === 'number' ? value : 55;
+  }
+
+  private bathHeaterMode(device: GenericDevice): string {
+    const value = device.state['mode'];
+    return typeof value === 'string' ? value : 'warm';
+  }
+
+  private bathHeaterModeLabel(device: GenericDevice): string {
+    const mode = this.bathHeaterMode(device);
+    if (mode === 'ventilate') {
+      return '换气中';
+    }
+    if (mode === 'dry') {
+      return '干燥中';
+    }
+    return '暖风中';
+  }
+
+  private setGenericPower(device: GenericDevice, power: boolean): void {
+    const payload: CommandPayload = {};
+    payload['power'] = power;
+    this.deviceManager.executeDeviceAction(device, 'setPower', payload);
+  }
+
+  private setHumidifierTarget(device: GenericDevice, targetHumidityPercent: number): void {
+    const payload: CommandPayload = {};
+    payload['targetHumidityPercent'] = Math.round(targetHumidityPercent);
+    this.deviceManager.executeDeviceAction(device, 'setTargetHumidity', payload);
+  }
+
+  private setBathHeaterMode(device: GenericDevice, mode: string): void {
+    const payload: CommandPayload = {};
+    payload['mode'] = mode;
+    this.deviceManager.executeDeviceAction(device, 'setMode', payload);
   }
 
   private shouldCommitSlider(mode: SliderChangeMode): boolean {
@@ -488,6 +844,25 @@ export struct TemperatureTab {
     for (let index = 0; index < devices.length; index++) {
       if (devices[index].id === this.deviceId) {
         result.push(devices[index]);
+      }
+    }
+    return result;
+  }
+
+  private humidifiers(): GenericDevice[] {
+    return this.genericDevicesByType('humidifier');
+  }
+
+  private bathHeaters(): GenericDevice[] {
+    return this.genericDevicesByType('bathHeater');
+  }
+
+  private genericDevicesByType(type: string): GenericDevice[] {
+    const result: GenericDevice[] = [];
+    const devices = this.deviceManager.devices;
+    for (let index = 0; index < devices.length; index++) {
+      if (devices[index].type === type) {
+        result.push(devices[index] as GenericDevice);
       }
     }
     return result;

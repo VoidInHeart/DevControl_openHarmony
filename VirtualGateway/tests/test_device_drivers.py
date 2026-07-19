@@ -191,6 +191,28 @@ def test_default_registry_restores_bedroom_devices_and_bath_heater(
     assert result is not None
     assert result["state"]["targetHumidityPercent"] == 60
 
+    air_conditioner = registry.get("ac-living-01")
+    result, _ = registry.execute(
+        air_conditioner["id"],
+        "setDehumidify",
+        {"enabled": True},
+        air_conditioner["stateVersion"],
+    )
+    assert result is not None
+    assert result["mode"] == "dry"
+    assert result["power"] is True
+
+    air_conditioner = registry.get("ac-living-01")
+    result, _ = registry.execute(
+        air_conditioner["id"],
+        "setDehumidify",
+        {"enabled": False},
+        air_conditioner["stateVersion"],
+    )
+    assert result is not None
+    assert result["mode"] == "dry"
+    assert result["power"] is False
+
 
 def test_curtain_commands_and_ticks_progress_authoritative_state(
     storage: GatewayStorage,

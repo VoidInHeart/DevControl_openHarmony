@@ -79,7 +79,7 @@ export class DeviceRegistry {
     ]),
     new DeviceCapability(DeviceType.ENVIRONMENT, '环境', '≈', []),
     new DeviceCapability(DeviceType.AIR_CONDITIONER, '空调', '❄', [
-      'setPower', 'setMode', 'setTemperature', 'setFanSpeed', 'setBrand'
+      'setPower', 'setMode', 'setTemperature', 'setFanSpeed', 'setDehumidify', 'setBrand'
     ]),
     new DeviceCapability(DeviceType.DOOR_LOCK, '门锁', '🔒', [
       'lock', 'unlock', 'setAutoLockConfig'

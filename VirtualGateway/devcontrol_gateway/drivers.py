@@ -396,6 +396,14 @@ class AirConditionerDriver(DeviceDriver):
                 raise GatewayError(INVALID_COMMAND, "空调风速参数无效")
             command = NormalizedAcCommand(action=action, fan_speed=fan_speed)
             device["fanSpeed"] = fan_speed
+        elif action == "setDehumidify":
+            enabled = payload.get("enabled")
+            if not isinstance(enabled, bool):
+                raise GatewayError(INVALID_COMMAND, "Invalid dehumidify switch")
+            device["mode"] = "dry"
+            device["power"] = enabled
+            device["running"] = enabled
+            command = NormalizedAcCommand(action="setMode", mode="dry")
         elif action == "setBrand":
             brand = payload.get("brand")
             if not isinstance(brand, str) or brand not in ADAPTERS:
