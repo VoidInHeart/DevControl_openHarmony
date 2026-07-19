@@ -47,66 +47,101 @@ class DeviceRegistry:
         }
 
     def _default_devices(self) -> dict[str, dict[str, Any]]:
-        light = self._base(
-            "light-living-01", "客厅主灯", "living", "light"
-        )
-        light.update(
-            {
-                "power": False,
-                "brightness": 60,
-                "lastNonZeroBrightness": 60,
-                "automation": {
-                    "enabled": False,
-                    "illuminanceThresholdLux": 100,
-                    "noPresenceDelaySeconds": 60,
-                    "manualOverrideUntil": None,
-                },
-                "_noPresenceSince": None,
-            }
-        )
+        def light(
+            device_id: str,
+            name: str,
+            room_id: str,
+            brightness: int,
+            automation_enabled: bool = False,
+        ) -> dict[str, Any]:
+            device = self._base(device_id, name, room_id, "light")
+            device.update(
+                {
+                    "power": False,
+                    "brightness": brightness,
+                    "lastNonZeroBrightness": brightness,
+                    "automation": {
+                        "enabled": automation_enabled,
+                        "illuminanceThresholdLux": 100,
+                        "noPresenceDelaySeconds": 60,
+                        "manualOverrideUntil": None,
+                    },
+                    "_noPresenceSince": None,
+                }
+            )
+            return device
 
-        environment = self._base(
-            "env-living-01", "客厅环境传感器", "living", "environment"
-        )
-        environment.update(
-            {
-                "temperatureCelsius": 24.0,
-                "humidityPercent": 55.0,
-                "illuminanceLux": 80.0,
-                "presence": True,
-                "dataValid": True,
-                "_manualInjectionUntil": 0.0,
-            }
-        )
+        def environment(
+            device_id: str,
+            name: str,
+            room_id: str,
+            temperature: float,
+            humidity: float,
+            illuminance: float,
+            presence: bool,
+        ) -> dict[str, Any]:
+            device = self._base(device_id, name, room_id, "environment")
+            device.update(
+                {
+                    "temperatureCelsius": temperature,
+                    "humidityPercent": humidity,
+                    "illuminanceLux": illuminance,
+                    "presence": presence,
+                    "dataValid": True,
+                    "_manualInjectionUntil": 0.0,
+                }
+            )
+            return device
 
-        ac = self._base(
-            "ac-living-01", "客厅空调", "living", "airConditioner"
-        )
-        ac.update(
-            {
-                "brand": "haierSim",
-                "power": False,
-                "mode": "auto",
-                "targetTemperatureCelsius": 24,
-                "running": False,
-                "lastAdapterFrame": "",
-            }
-        )
+        def ac(
+            device_id: str,
+            name: str,
+            room_id: str,
+            brand: str,
+            target_temperature: int,
+        ) -> dict[str, Any]:
+            device = self._base(device_id, name, room_id, "airConditioner")
+            device.update(
+                {
+                    "brand": brand,
+                    "power": False,
+                    "mode": "auto",
+                    "targetTemperatureCelsius": target_temperature,
+                    "fanSpeed": "auto",
+                    "running": False,
+                    "lastAdapterFrame": "",
+                }
+            )
+            return device
 
-        door = self._base(
-            "door-entry-01", "入户门锁", "entry", "doorLock"
+        def door(device_id: str, name: str, room_id: str, battery: int) -> dict[str, Any]:
+            device = self._base(device_id, name, room_id, "doorLock")
+            device.update(
+                {
+                    "locked": True,
+                    "jammed": False,
+                    "batteryPercent": battery,
+                    "autoLockEnabled": True,
+                    "autoLockDelaySeconds": 10,
+                    "autoLockAt": None,
+                }
+            )
+            return device
+
+        devices = (
+            light("light-living-01", "客厅主灯", "living", 70, True),
+            light("light-living-02", "客厅氛围灯", "living", 45, True),
+            light("light-master-01", "主卧顶灯", "masterBedroom", 60, True),
+            light("light-bedroom-01", "次卧阅读灯", "bedroom", 50, False),
+            light("light-bathroom-01", "浴室镜前灯", "bathroom", 80, True),
+            environment("env-living-01", "客厅环境传感器", "living", 24.0, 55.0, 80.0, True),
+            environment("env-master-01", "主卧环境传感器", "masterBedroom", 23.4, 52.0, 130.0, False),
+            environment("env-bathroom-01", "浴室湿度传感器", "bathroom", 25.2, 68.0, 160.0, False),
+            ac("ac-living-01", "客厅空调", "living", "haierSim", 24),
+            ac("ac-master-01", "主卧空调", "masterBedroom", "greeSim", 26),
+            door("door-entry-01", "入户门锁", "entry", 92),
         )
-        door.update(
-            {
-                "locked": True,
-                "jammed": False,
-                "batteryPercent": 92,
-                "autoLockEnabled": True,
-                "autoLockDelaySeconds": 10,
-                "autoLockAt": None,
-            }
-        )
-        return {device["id"]: device for device in (light, environment, ac, door)}
+        return {device["id"]: device for device in devices}
 
     def snapshot(self) -> list[dict[str, Any]]:
         return [self.public_device(device) for device in self.devices.values()]
@@ -260,12 +295,22 @@ class DeviceRegistry:
                 action=action, temperature=temperature
             )
             device["targetTemperatureCelsius"] = temperature
+        elif action == "setFanSpeed":
+            fan_speed = payload.get("fanSpeed")
+            if not isinstance(fan_speed, str) or fan_speed not in {"auto", "low", "medium", "high"}:
+                raise GatewayError(INVALID_COMMAND, "空调风速参数无效")
+            command = NormalizedAcCommand(action=action, fan_speed=fan_speed)
+            device["fanSpeed"] = fan_speed
         elif action == "setBrand":
             brand = payload.get("brand")
             if not isinstance(brand, str) or brand not in ADAPTERS:
                 raise GatewayError(INVALID_COMMAND, "模拟品牌不受支持")
             device["brand"] = brand
-            command = NormalizedAcCommand(action="setPower", power=device["power"])
+            command = NormalizedAcCommand(
+                action="setPower", power=device["power"], mode=device["mode"],
+                temperature=device["targetTemperatureCelsius"],
+                fan_speed=device["fanSpeed"]
+            )
         else:
             raise GatewayError(INVALID_COMMAND, "空调动作不受支持")
 
@@ -314,16 +359,21 @@ class DeviceRegistry:
         self._touch(device)
 
     def _execute_away(self) -> list[dict[str, object]]:
-        actions = (
-            ("light-living-01", (("setPower", {"power": False}),)),
-            ("ac-living-01", (("setPower", {"power": False}),)),
-            ("door-entry-01", (("lock", {}),)),
+        actions = tuple(
+            (device_id, (("setPower", {"power": False}),))
+            for device_id, device in self.devices.items()
+            if device["type"] in {"light", "airConditioner"}
+        ) + tuple(
+            (device_id, (("lock", {}),))
+            for device_id, device in self.devices.items()
+            if device["type"] == "doorLock"
         )
         return self._execute_scene_actions(actions)
 
     def _execute_home(self) -> list[dict[str, object]]:
         actions = (
             ("light-living-01", (("setBrightness", {"brightness": 70}),)),
+            ("light-living-02", (("setBrightness", {"brightness": 45}),)),
             (
                 "ac-living-01",
                 (

@@ -103,6 +103,7 @@
             "power",
             "mode",
             "targetTemperatureCelsius",
+            "fanSpeed",
             "running"
           ],
           "properties": {
@@ -117,6 +118,7 @@
               "minimum": 16,
               "maximum": 30
             },
+            "fanSpeed": { "enum": ["auto", "low", "medium", "high"] },
             "running": { "type": "boolean" },
             "lastAdapterFrame": { "type": "string" }
           }

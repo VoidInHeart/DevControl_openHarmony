@@ -2,6 +2,8 @@ import { common } from '@kit.AbilityKit';
 import native from 'libentry.so';
 import {
   AccessLogEntry,
+  ACFanSpeed,
+  ACMode,
   AirConditionerDevice,
   AlertEntry,
   CommandPayload,
@@ -14,6 +16,7 @@ import {
   GatewaySession,
   LightDevice,
   parseDevice,
+  SceneDeviceAction,
   SceneExecutionDetail
 } from './DeviceModel';
 import { GatewayTransport, GatewayTransportListener } from '../service/GatewayTransport';
@@ -27,6 +30,7 @@ import { DeviceRegistry } from './DeviceRegistry';
 @Observed
 export class DeviceManager implements GatewayTransportListener {
   devices: DeviceInfo[] = [];
+  deviceStateRevision: number = 0;
   accessLogs: AccessLogEntry[] = [];
   alerts: AlertEntry[] = [];
   environmentHistory: EnvironmentHistoryPoint[] = [];
@@ -78,6 +82,7 @@ export class DeviceManager implements GatewayTransportListener {
       const cached = await this.snapshotStore.restore();
       if (cached !== null) {
         this.devices = cached.devices;
+        this.bumpDeviceStateRevision();
         this.lastSyncAt = cached.lastSyncAt;
       }
       const restored = await this.sessionStore.restore();
@@ -177,6 +182,7 @@ export class DeviceManager implements GatewayTransportListener {
     }
     this.session = null;
     this.devices = [];
+    this.bumpDeviceStateRevision();
     this.accessLogs = [];
     this.alerts = [];
     this.environmentHistory = [];
@@ -248,6 +254,7 @@ export class DeviceManager implements GatewayTransportListener {
     try {
       const snapshot = await this.transport.fetchDeviceSnapshot();
       this.devices = snapshot;
+      this.bumpDeviceStateRevision();
       this.lastSyncAt = Date.now();
       if (this.snapshotStore !== null) {
         try {
@@ -436,6 +443,12 @@ export class DeviceManager implements GatewayTransportListener {
     await this.submit(device, 'setTemperature', payload);
   }
 
+  async setAcFanSpeed(device: AirConditionerDevice, fanSpeed: string): Promise<void> {
+    const payload = new CommandPayload();
+    payload.fanSpeed = fanSpeed;
+    await this.submit(device, 'setFanSpeed', payload);
+  }
+
   async setAcBrand(device: AirConditionerDevice, brand: string): Promise<void> {
     const payload = new CommandPayload();
     payload.brand = brand;
@@ -465,9 +478,93 @@ export class DeviceManager implements GatewayTransportListener {
     await this.submitRaw('scene-home', 'executeHome', null, new CommandPayload());
   }
 
+  async executeConfiguredScene(actions: SceneDeviceAction[]): Promise<void> {
+    this.sceneResults = [];
+    for (let index = 0; index < actions.length; index++) {
+      const sceneAction = actions[index];
+      if (sceneAction.operation === 'keep') {
+        continue;
+      }
+      const device = this.getDeviceById(sceneAction.deviceId);
+      if (device === null || device.type === DeviceType.ENVIRONMENT) {
+        continue;
+      }
+      const power = sceneAction.operation === 'on';
+      if (device.type === DeviceType.LIGHT) {
+        await this.setLightPower(device as LightDevice, power);
+      } else if (device.type === DeviceType.AIR_CONDITIONER) {
+        await this.setAcPower(device as AirConditionerDevice, power);
+      } else if (device.type === DeviceType.DOOR_LOCK) {
+        await this.setDoorLocked(device as DoorLockDevice, !power);
+      }
+    }
+  }
+
+  async applySmartTemplate(templateId: string): Promise<void> {
+    if (templateId === 'away') {
+      await this.executeAwayScene();
+      return;
+    }
+    if (templateId === 'home') {
+      await this.executeHomeScene();
+      return;
+    }
+    if (templateId === 'motionLight') {
+      await this.enableMotionLighting(100, 60);
+      return;
+    }
+    if (templateId === 'cooling') {
+      await this.configureAllAirConditioners(true, ACMode.COOL, 24, ACFanSpeed.AUTO);
+      return;
+    }
+    if (templateId === 'heating') {
+      await this.configureAllAirConditioners(true, ACMode.HEAT, 26, ACFanSpeed.LOW);
+      return;
+    }
+    if (templateId === 'humidityDry') {
+      await this.configureAllAirConditioners(true, ACMode.DRY, 24, ACFanSpeed.MEDIUM);
+    }
+  }
+
+  async applyCustomAutomation(condition: string, action: string): Promise<void> {
+    if (action === 'livingLight') {
+      await this.enableMotionLighting(condition === 'motionDark' ? 100 : 180, 60);
+      return;
+    }
+    if (action === 'dryMode') {
+      await this.configureAllAirConditioners(true, ACMode.DRY, 24, ACFanSpeed.MEDIUM);
+      return;
+    }
+    if (action === 'awayScene') {
+      await this.executeAwayScene();
+    }
+  }
+
   private async connectAndSync(): Promise<void> {
     await this.transport.connect(this);
     await this.refreshAll();
+  }
+
+  private async enableMotionLighting(threshold: number, delaySeconds: number): Promise<void> {
+    const lights = this.getLights();
+    for (let index = 0; index < lights.length; index++) {
+      await this.setLightAutomation(lights[index], true, threshold, delaySeconds);
+    }
+  }
+
+  private async configureAllAirConditioners(
+    power: boolean,
+    mode: string,
+    temperature: number,
+    fanSpeed: string
+  ): Promise<void> {
+    const airConditioners = this.getAirConditioners();
+    for (let index = 0; index < airConditioners.length; index++) {
+      await this.setAcPower(airConditioners[index], power);
+      await this.setAcMode(airConditioners[index], mode);
+      await this.setAcTemperature(airConditioners[index], temperature);
+      await this.setAcFanSpeed(airConditioners[index], fanSpeed);
+    }
   }
 
   private async submit(
@@ -537,6 +634,7 @@ export class DeviceManager implements GatewayTransportListener {
       result.push(incoming);
     }
     this.devices = result;
+    this.bumpDeviceStateRevision();
     this.lastSyncAt = Date.now();
   }
 
@@ -573,7 +671,7 @@ export class DeviceManager implements GatewayTransportListener {
       this.lastErrorCode = '';
     }
     this.accessLogs = [log, ...this.accessLogs].slice(0, 50);
-    if (this.isSceneCommand(deviceId) && success) {
+    if (success) {
       this.refreshAll().catch((error: Error) => {
         this.setErrorFromException(error);
       });
@@ -642,6 +740,10 @@ export class DeviceManager implements GatewayTransportListener {
     this.pendingByMessage.clear();
     this.actionByMessage.clear();
     this.pendingDeviceIds = [];
+  }
+
+  private bumpDeviceStateRevision(): void {
+    this.deviceStateRevision += 1;
   }
 
   private invalidateSession(message: string): void {

@@ -1,5 +1,6 @@
 import { AccessLogEntry, AlertEntry, DeviceType, DoorLockDevice } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { LockIcon } from './LockIcon';
 
 @Component
 export struct DoorLockTab {
@@ -36,35 +37,42 @@ export struct DoorLockTab {
   @Builder
   DoorCard(device: DoorLockDevice) {
     Column() {
-      Text(device.state.locked ? '🔒' : '🔓')
-        .fontSize(64)
-        .fontColor(device.state.locked ?
-          $r('app.color.lock_icon_locked') : $r('app.color.lock_icon_unlocked'))
-      Text(device.name)
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .margin({ top: 8 })
-      Text(device.state.jammed ? '门锁卡滞' : (device.state.locked ? '已锁定' : '已解锁'))
-        .fontSize(16)
-        .fontColor(device.state.jammed ?
-          $r('app.color.status_alert') :
-          (device.state.locked ?
-            $r('app.color.lock_icon_locked') : $r('app.color.lock_icon_unlocked')))
-        .margin({ top: 4 })
-      Text('电量 ' + device.state.batteryPercent.toFixed(0) + '%' +
-        (device.online ? '' : ' · 设备离线'))
-        .fontSize(12)
-        .fontColor(device.state.batteryPercent <= 20 ?
-          $r('app.color.status_warning') : $r('app.color.text_secondary'))
-        .margin({ top: 6 })
-
-      if (this.deviceManager.isDevicePending(device.id)) {
-        Text('命令处理中，最终状态以网关回传为准')
-          .fontSize(12)
-          .fontColor($r('app.color.status_warning'))
-          .margin({ top: 10 })
+      Row() {
+        Stack({ alignContent: Alignment.Center }) {
+          LockIcon({ locked: device.state.locked, iconSize: 30 })
+        }
+          .width(62)
+          .height(62)
+          .backgroundColor(device.state.locked ? '#EEF1FF' : '#EAF8F1')
+          .borderRadius(22)
+        Column() {
+          Text(device.name)
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text(device.state.jammed ? '锁体异常，拒绝远程操作' :
+            (device.state.locked ? '已上锁 · 家庭安全入口' : '已解锁 · 请确认门口安全'))
+            .fontSize(12)
+            .fontColor(device.state.jammed ? $r('app.color.status_alert') : '#748294')
+            .margin({ top: 5 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        .margin({ left: 14 })
+        if (this.deviceManager.isDevicePending(device.id)) {
+          this.PendingBadge()
+        }
       }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row() {
+        this.StatusCell('门锁', device.state.locked ? '已锁' : '未锁')
+        this.StatusCell('电量', device.state.batteryPercent.toFixed(0) + '%')
+        this.StatusCell('自动上锁', device.state.autoLockEnabled ? '开启' : '关闭')
+      }
+      .width('100%')
+      .margin({ top: 16 })
 
       Row() {
         Button('锁门')
@@ -107,10 +115,48 @@ export struct DoorLockTab {
     }
     .width('100%')
     .padding(18)
-    .borderRadius(16)
-    .backgroundColor($r('app.color.card_background'))
+    .borderRadius(24)
+    .backgroundColor('#F7FBFF')
     .alignItems(HorizontalAlign.Center)
     .margin({ bottom: 12 })
+  }
+
+  @Builder
+  StatusCell(label: string, value: string) {
+    Column() {
+      Text(value)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14263A')
+      Text(label)
+        .fontSize(11)
+        .fontColor('#748294')
+        .margin({ top: 4 })
+    }
+    .layoutWeight(1)
+    .height(58)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor(Color.White)
+    .borderRadius(18)
+    .margin({ right: 8 })
+  }
+
+  @Builder
+  PendingBadge() {
+    Row() {
+      Text('•')
+        .fontSize(16)
+        .fontColor('#D28A00')
+        .margin({ right: 4 })
+      Text('同步中')
+        .fontSize(11)
+        .fontColor('#8A5A00')
+    }
+    .height(28)
+    .padding({ left: 9, right: 10 })
+    .backgroundColor('#FFF3D6')
+    .borderRadius(14)
   }
 
   @Builder
@@ -170,8 +216,8 @@ export struct DoorLockTab {
     }
     .width('100%')
     .padding(16)
-    .borderRadius(16)
-    .backgroundColor($r('app.color.card_background'))
+    .borderRadius(24)
+    .backgroundColor('#F7FBFF')
     .margin({ bottom: 12 })
   }
 
