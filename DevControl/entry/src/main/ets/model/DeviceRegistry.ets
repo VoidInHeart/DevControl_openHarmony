@@ -88,8 +88,6 @@ export class DeviceRegistry {
 
   private static readonly homeFeatures: DeviceFeature[] = [
     new DeviceFeature('lighting', '灯光', '○', [DeviceType.LIGHT]),
-    // Curtain support is reserved for gateways that expose a curtain adapter.
-    new DeviceFeature('curtains', '窗帘', '▥', []),
     new DeviceFeature('environment', '环境', '≈', [
       DeviceType.ENVIRONMENT, DeviceType.AIR_CONDITIONER
     ]),

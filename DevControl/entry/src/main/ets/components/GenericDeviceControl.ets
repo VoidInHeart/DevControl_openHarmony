@@ -6,6 +6,7 @@ import {
   DeviceControlOption,
   GenericDevice
 } from '../model/GenericDeviceModel';
+import { CurtainIcon } from './CurtainIcon';
 
 @Component
 export struct GenericDeviceControl {
@@ -49,11 +50,20 @@ export struct GenericDeviceControl {
   @Builder
   DeviceStatus(device: GenericDevice) {
     Row() {
-      Text(device.category.icon)
-        .fontSize(38)
+      Stack({ alignContent: Alignment.Center }) {
+        if (device.category.id === 'curtains') {
+          CurtainIcon({ iconSize: 34 })
+        } else {
+          Text(device.category.icon)
+            .fontSize(38)
+            .width(58)
+            .height(58)
+            .lineHeight(58)
+            .textAlign(TextAlign.Center)
+        }
+      }
         .width(58)
         .height(58)
-        .textAlign(TextAlign.Center)
         .backgroundColor('#EAF5FF')
         .borderRadius(18)
       Column() {

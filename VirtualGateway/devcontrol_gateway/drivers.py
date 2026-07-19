@@ -62,6 +62,10 @@ class DeviceDriver(ABC):
     device_type: str
     tick_priority: int = 100
 
+    def create_categories(self) -> list[dict[str, Any]]:
+        """Declare generic UI categories before creating devices that use them."""
+        return []
+
     @abstractmethod
     def create_devices(self) -> list[dict[str, Any]]:
         raise NotImplementedError
@@ -289,6 +293,7 @@ class AirConditionerDriver(DeviceDriver):
                 "power": False,
                 "mode": "auto",
                 "targetTemperatureCelsius": 24,
+                "fanSpeed": "auto",
                 "running": False,
                 "lastAdapterFrame": "",
             }
@@ -321,6 +326,12 @@ class AirConditionerDriver(DeviceDriver):
                 raise GatewayError(INVALID_COMMAND, "目标温度必须为整数")
             command = NormalizedAcCommand(action=action, temperature=temperature)
             device["targetTemperatureCelsius"] = temperature
+        elif action == "setFanSpeed":
+            fan_speed = payload.get("fanSpeed")
+            if not isinstance(fan_speed, str):
+                raise GatewayError(INVALID_COMMAND, "空调风速参数无效")
+            command = NormalizedAcCommand(action=action, fan_speed=fan_speed)
+            device["fanSpeed"] = fan_speed
         elif action == "setBrand":
             brand = payload.get("brand")
             if not isinstance(brand, str) or brand not in ADAPTERS:
@@ -422,18 +433,23 @@ class CurtainDriver(DeviceDriver):
     device_type = "curtain"
     tick_priority = 50
 
+    def create_categories(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": "curtains",
+                "title": "窗帘",
+                "icon": "curtain",
+                "homeOnly": False,
+            }
+        ]
+
     def create_devices(self) -> list[dict[str, Any]]:
         curtain = base_device(
             "curtain-living-01", "客厅智能窗帘", "living", self.device_type
         )
         curtain.update(
             {
-                "category": {
-                    "id": "curtains",
-                    "title": "窗帘",
-                    "icon": "🪟",
-                    "homeOnly": False,
-                },
+                "_categoryId": "curtains",
                 "state": {
                     "positionPercent": 0,
                     "targetPositionPercent": 0,
@@ -534,13 +550,3 @@ class CurtainDriver(DeviceDriver):
         if current == target:
             state["movement"] = "stopped"
         return True
-
-
-def default_drivers() -> list[DeviceDriver]:
-    return [
-        LightDriver(),
-        EnvironmentDriver(),
-        AirConditionerDriver(),
-        DoorLockDriver(),
-        CurtainDriver(),
-    ]

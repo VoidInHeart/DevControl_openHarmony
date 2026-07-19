@@ -9,6 +9,8 @@ import {
 } from '../model/DeviceModel';
 import { DeviceFeature, DeviceRegistry } from '../model/DeviceRegistry';
 import { DeviceManager } from '../model/DeviceManager';
+import { GenericDevice } from '../model/GenericDeviceModel';
+import { CurtainIcon } from './CurtainIcon';
 import { LockIcon } from './LockIcon';
 
 @Component
@@ -616,7 +618,6 @@ export struct ControlCenterTab {
         }, (feature: DeviceFeature) => feature.id)
       }
       .width('100%')
-      .justifyContent(FlexAlign.SpaceBetween)
     }
     .width('100%')
     .margin({ bottom: 6 })
@@ -626,7 +627,7 @@ export struct ControlCenterTab {
   @Builder
   FeatureCard(feature: DeviceFeature) {
     Column() {
-      Text(this.featureTitle(feature.id))
+      Text(feature.title)
         .fontSize(15)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14263A')
@@ -643,8 +644,10 @@ export struct ControlCenterTab {
         Stack({ alignContent: Alignment.Center }) {
           if (feature.id === 'locks') {
             LockIcon({ locked: true, iconSize: 26 })
+          } else if (feature.id === 'curtains') {
+            CurtainIcon({ iconSize: 32 })
           } else {
-            Text(this.featureIcon(feature.id))
+            Text(feature.icon)
               .fontSize(34)
               .width(54)
               .height(54)
@@ -734,6 +737,8 @@ export struct ControlCenterTab {
     Stack({ alignContent: Alignment.Center }) {
       if (device.type === DeviceType.DOOR_LOCK) {
         LockIcon({ locked: (device as DoorLockDevice).state.locked, iconSize: badgeSize - 20 })
+      } else if (this.isCurtainDevice(device)) {
+        CurtainIcon({ iconSize: badgeSize - 18 })
       } else {
         Text(this.deviceIcon(device))
           .fontSize(badgeSize - 27)
@@ -919,32 +924,6 @@ export struct ControlCenterTab {
     return roomId;
   }
 
-  private featureTitle(featureId: string): string {
-    if (featureId === 'lighting') {
-      return '灯光';
-    }
-    if (featureId === 'environment') {
-      return '环境';
-    }
-    if (featureId === 'locks') {
-      return '门锁';
-    }
-    return featureId;
-  }
-
-  private featureIcon(featureId: string): string {
-    if (featureId === 'lighting') {
-      return '○';
-    }
-    if (featureId === 'environment') {
-      return '≈';
-    }
-    if (featureId === 'locks') {
-      return '🔒';
-    }
-    return '·';
-  }
-
   private featureTint(featureId: string): string {
     if (featureId === 'lighting') {
       return '#FFF4D8';
@@ -954,6 +933,9 @@ export struct ControlCenterTab {
     }
     if (featureId === 'locks') {
       return '#EEF1FF';
+    }
+    if (featureId === 'curtains') {
+      return '#EAF4FF';
     }
     return '#F2F5F9';
   }
@@ -982,6 +964,9 @@ export struct ControlCenterTab {
     if (device.type === DeviceType.AIR_CONDITIONER) {
       return '❄';
     }
+    if (this.isCurtainDevice(device)) {
+      return '';
+    }
     const doorLock = device as DoorLockDevice;
     return doorLock.state.locked ? '🔒' : '🔓';
   }
@@ -996,7 +981,15 @@ export struct ControlCenterTab {
     if (device.type === DeviceType.AIR_CONDITIONER) {
       return '#EAF4FF';
     }
+    if (this.isCurtainDevice(device)) {
+      return '#EAF4FF';
+    }
     return '#EEF1FF';
+  }
+
+  private isCurtainDevice(device: DeviceInfo): boolean {
+    return DeviceRegistry.getCapability(device.type) === null &&
+      (device as GenericDevice).category.id === 'curtains';
   }
 
   private deviceSummary(device: DeviceInfo): string {

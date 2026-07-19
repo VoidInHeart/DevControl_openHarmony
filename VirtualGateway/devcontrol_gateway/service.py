@@ -6,6 +6,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from .composition import default_drivers
 from .config import GatewayConfig
 from .registry import DeviceRegistry
 from .errors import (
@@ -32,7 +33,7 @@ class GatewayService:
             config.initial_pairing_code,
             credential_ttl_seconds=config.credential_ttl_seconds,
         )
-        self.devices = DeviceRegistry(self.storage)
+        self.devices = DeviceRegistry(self.storage, drivers=default_drivers())
         self._result_cache: dict[
             tuple[str, str], tuple[float, dict[str, Any]]
         ] = {}

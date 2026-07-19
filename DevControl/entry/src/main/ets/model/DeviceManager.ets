@@ -444,8 +444,8 @@ export class DeviceManager implements GatewayTransportListener {
   }
 
   async setAcFanSpeed(device: AirConditionerDevice, fanSpeed: string): Promise<void> {
-    const payload = new CommandPayload();
-    payload.fanSpeed = fanSpeed;
+    const payload: CommandPayload = {};
+    payload['fanSpeed'] = fanSpeed;
     await this.submit(device, 'setFanSpeed', payload);
   }
 

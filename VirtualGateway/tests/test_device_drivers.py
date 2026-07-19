@@ -48,6 +48,17 @@ class DuplicateIdDriver(FakeSwitchDriver):
         ]
 
 
+class MissingCategoryDriver(DeviceDriver):
+    device_type = "missingCategory"
+
+    def create_devices(self) -> list[dict[str, object]]:
+        device = base_device(
+            "missing-category-01", "缺少分类", "test-room", self.device_type
+        )
+        device.update({"_categoryId": "missing", "state": {}, "controls": []})
+        return [device]
+
+
 @pytest.fixture
 def storage(tmp_path: Path):
     value = GatewayStorage(tmp_path / "drivers.db")
@@ -103,11 +114,24 @@ def test_common_offline_check_applies_to_registered_drivers(
     assert failure.value.code == DEVICE_OFFLINE
 
 
+def test_generic_devices_must_reference_a_registered_category(
+    storage: GatewayStorage,
+) -> None:
+    registry = DeviceRegistry(storage, drivers=[])
+
+    with pytest.raises(ValueError, match="registered category"):
+        registry.register_driver(MissingCategoryDriver())
+
+
 def test_curtain_commands_and_ticks_progress_authoritative_state(
     storage: GatewayStorage,
 ) -> None:
     registry = DeviceRegistry(storage)
     curtain = registry.get("curtain-living-01")
+    assert curtain["_categoryId"] == "curtains"
+    snapshot = registry.snapshot()
+    public_curtain = next(item for item in snapshot if item["id"] == curtain["id"])
+    assert public_curtain["category"]["id"] == "curtains"
     assert curtain["controls"][0]["kind"] == "slider"
 
     result, _ = registry.execute(

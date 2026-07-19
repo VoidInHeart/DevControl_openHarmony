@@ -5,7 +5,8 @@ import time
 from collections.abc import Iterable
 from typing import Any
 
-from .drivers import DeviceDriver, default_drivers, iso_now
+from .composition import default_drivers
+from .drivers import DeviceDriver, iso_now
 from .errors import (
     COMMAND_TIMEOUT,
     DEVICE_OFFLINE,
@@ -28,6 +29,7 @@ class DeviceRegistry:
     ) -> None:
         self.storage = storage
         self._pending_alerts: list[dict[str, Any]] = []
+        self.categories: dict[str, dict[str, Any]] = {}
         self.drivers: dict[str, DeviceDriver] = {}
         self.devices: dict[str, dict[str, Any]] = {}
         for driver in drivers if drivers is not None else default_drivers():
@@ -37,7 +39,9 @@ class DeviceRegistry:
         device_type = driver.device_type
         if not device_type or device_type in self.drivers:
             raise ValueError(f"duplicate or empty device driver type: {device_type}")
+        new_categories = self._validate_categories(driver)
         created = driver.create_devices()
+        registered_category_ids = set(self.categories) | set(new_categories)
         new_ids: set[str] = set()
         for device in created:
             device_id = device.get("id")
@@ -49,19 +53,60 @@ class DeviceRegistry:
                 )
             if device_id in self.devices or device_id in new_ids:
                 raise ValueError(f"duplicate device id: {device_id}")
+            if "category" in device:
+                raise ValueError(
+                    f"driver {device_type} must register generic categories separately"
+                )
+            if "state" in device or "controls" in device:
+                category_id = device.get("_categoryId")
+                if (
+                    not isinstance(category_id, str)
+                    or category_id not in registered_category_ids
+                ):
+                    raise ValueError(
+                        f"driver {device_type} created a generic device without a registered category"
+                    )
             new_ids.add(device_id)
+        self.categories.update(new_categories)
         self.drivers[device_type] = driver
         for device in created:
             self.devices[device["id"]] = device
 
+    def _validate_categories(self, driver: DeviceDriver) -> dict[str, dict[str, Any]]:
+        categories: dict[str, dict[str, Any]] = {}
+        for category in driver.create_categories():
+            category_id = category.get("id")
+            title = category.get("title")
+            icon = category.get("icon")
+            home_only = category.get("homeOnly")
+            if (
+                not isinstance(category_id, str)
+                or not category_id
+                or not isinstance(title, str)
+                or not title
+                or not isinstance(icon, str)
+                or not icon
+                or not isinstance(home_only, bool)
+            ):
+                raise ValueError(
+                    f"driver {driver.device_type} created an invalid category"
+                )
+            if category_id in self.categories or category_id in categories:
+                raise ValueError(f"duplicate category id: {category_id}")
+            categories[category_id] = copy.deepcopy(category)
+        return categories
+
     def snapshot(self) -> list[dict[str, Any]]:
         return [self.public_device(device) for device in self.devices.values()]
 
-    @staticmethod
-    def public_device(device: dict[str, Any]) -> dict[str, Any]:
-        return copy.deepcopy(
+    def public_device(self, device: dict[str, Any]) -> dict[str, Any]:
+        public = copy.deepcopy(
             {key: value for key, value in device.items() if not key.startswith("_")}
         )
+        category_id = device.get("_categoryId")
+        if isinstance(category_id, str):
+            public["category"] = copy.deepcopy(self.categories[category_id])
+        return public
 
     def get(self, device_id: str) -> dict[str, Any]:
         device = self.devices.get(device_id)

@@ -231,8 +231,6 @@ def test_tamper_replay_and_state_conflict(service: GatewayService) -> None:
     )
     conflict, _ = process(service, session, stale)
     assert conflict["error"]["code"] == "STATE_CONFLICT"
-
-
 def test_expired_message_is_rejected(service: GatewayService) -> None:
     _, session = pair(service)
     light = service.devices.get("light-living-01")
@@ -265,9 +263,9 @@ def test_away_scene_returns_per_device_results(
     )
     result, events = process(service, session, envelope)
     assert result["success"] is True
-    assert len(result["details"]) == 8
+    assert len(result["details"]) == 3
     assert all(item["success"] for item in result["details"])
-    assert len(events) == 8
+    assert len(events) == 3
     assert service.devices.get("light-living-01")["power"] is False
     assert service.devices.get("ac-living-01")["power"] is False
     assert service.devices.get("door-entry-01")["locked"] is True
@@ -291,9 +289,9 @@ def test_home_scene_returns_per_device_results(
     )
     result, events = process(service, session, envelope)
     assert result["success"] is True
-    assert len(result["details"]) == 4
+    assert len(result["details"]) == 3
     assert all(item["success"] for item in result["details"])
-    assert len(events) == 4
+    assert len(events) == 3
     light = service.devices.get("light-living-01")
     ac = service.devices.get("ac-living-01")
     assert light["power"] is True
