@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .drivers import (
     AirConditionerDriver,
+    BathHeaterDriver,
     CurtainDriver,
     DeviceDriver,
     DoorLockDriver,
@@ -15,6 +16,7 @@ def default_drivers() -> list[DeviceDriver]:
     return [
         LightDriver(),
         EnvironmentDriver(),
+        BathHeaterDriver(),
         AirConditionerDriver(),
         DoorLockDriver(),
         CurtainDriver(),

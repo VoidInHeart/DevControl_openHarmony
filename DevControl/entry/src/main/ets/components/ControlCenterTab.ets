@@ -967,6 +967,9 @@ export struct ControlCenterTab {
     if (this.isCurtainDevice(device)) {
       return '';
     }
+    if (DeviceRegistry.getCapability(device.type) === null) {
+      return (device as GenericDevice).category.icon;
+    }
     const doorLock = device as DoorLockDevice;
     return doorLock.state.locked ? '🔒' : '🔓';
   }
@@ -983,6 +986,10 @@ export struct ControlCenterTab {
     }
     if (this.isCurtainDevice(device)) {
       return '#EAF4FF';
+    }
+    if (DeviceRegistry.getCapability(device.type) === null) {
+      return (device as GenericDevice).category.id === 'environment' ?
+        '#E8F8F3' : '#F2F5F9';
     }
     return '#EEF1FF';
   }
@@ -1010,6 +1017,9 @@ export struct ControlCenterTab {
       return airConditioner.state.power ?
         this.modeLabel(airConditioner.state.mode) + ' · ' +
           airConditioner.state.targetTemperatureCelsius.toFixed(0) + '°C' : '关闭';
+    }
+    if (DeviceRegistry.getCapability(device.type) === null) {
+      return DeviceRegistry.present(device).summary;
     }
     const doorLock = device as DoorLockDevice;
     if (doorLock.state.jammed) {

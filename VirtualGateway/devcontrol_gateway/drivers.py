@@ -88,12 +88,25 @@ class LightDriver(DeviceDriver):
     tick_priority = 30
 
     def create_devices(self) -> list[dict[str, Any]]:
-        light = base_device("light-living-01", "客厅主灯", "living", self.device_type)
+        return [
+            self._light("light-living-01", "客厅主灯", "living", 60),
+            self._light("light-master-01", "主卧顶灯", "masterBedroom", 60),
+            self._light("light-bedroom-01", "次卧阅读灯", "bedroom", 50),
+        ]
+
+    def _light(
+        self,
+        device_id: str,
+        name: str,
+        room_id: str,
+        brightness: int,
+    ) -> dict[str, Any]:
+        light = base_device(device_id, name, room_id, self.device_type)
         light.update(
             {
                 "power": False,
-                "brightness": 60,
-                "lastNonZeroBrightness": 60,
+                "brightness": brightness,
+                "lastNonZeroBrightness": brightness,
                 "automation": {
                     "enabled": False,
                     "illuminanceThresholdLux": 100,
@@ -103,7 +116,7 @@ class LightDriver(DeviceDriver):
                 "_noPresenceSince": None,
             }
         )
-        return [light]
+        return light
 
     def execute(
         self,
@@ -206,21 +219,44 @@ class EnvironmentDriver(DeviceDriver):
     device_type = "environment"
     tick_priority = 10
 
+    def create_categories(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": "environment",
+                "title": "环境",
+                "icon": "≈",
+                "homeOnly": False,
+            }
+        ]
+
     def create_devices(self) -> list[dict[str, Any]]:
-        environment = base_device(
-            "env-living-01", "客厅环境传感器", "living", self.device_type
-        )
+        return [
+            self._sensor("env-living-01", "客厅环境传感器", "living", 24.0, 55.0, 80.0),
+            self._sensor("env-master-01", "主卧环境传感器", "masterBedroom", 23.4, 52.0, 130.0),
+            self._sensor("env-bedroom-01", "次卧环境传感器", "bedroom", 24.2, 54.0, 95.0),
+        ]
+
+    def _sensor(
+        self,
+        device_id: str,
+        name: str,
+        room_id: str,
+        temperature: float,
+        humidity: float,
+        illuminance: float,
+    ) -> dict[str, Any]:
+        environment = base_device(device_id, name, room_id, self.device_type)
         environment.update(
             {
-                "temperatureCelsius": 24.0,
-                "humidityPercent": 55.0,
-                "illuminanceLux": 80.0,
+                "temperatureCelsius": temperature,
+                "humidityPercent": humidity,
+                "illuminanceLux": illuminance,
                 "presence": True,
                 "dataValid": True,
                 "_manualInjectionUntil": 0.0,
             }
         )
-        return [environment]
+        return environment
 
     def tick(self, device: dict[str, Any], context: DriverContext) -> bool:
         now = time.time()
@@ -284,21 +320,35 @@ class AirConditionerDriver(DeviceDriver):
     tick_priority = 20
 
     def create_devices(self) -> list[dict[str, Any]]:
-        air_conditioner = base_device(
-            "ac-living-01", "客厅空调", "living", self.device_type
-        )
+        return [
+            self._air_conditioner("ac-living-01", "客厅空调", "living", "haierSim", 24),
+            self._air_conditioner(
+                "ac-master-01", "主卧空调", "masterBedroom", "greeSim", 26
+            ),
+            self._air_conditioner("ac-bedroom-01", "次卧空调", "bedroom", "mideaSim", 25),
+        ]
+
+    def _air_conditioner(
+        self,
+        device_id: str,
+        name: str,
+        room_id: str,
+        brand: str,
+        temperature: int,
+    ) -> dict[str, Any]:
+        air_conditioner = base_device(device_id, name, room_id, self.device_type)
         air_conditioner.update(
             {
-                "brand": "haierSim",
+                "brand": brand,
                 "power": False,
                 "mode": "auto",
-                "targetTemperatureCelsius": 24,
+                "targetTemperatureCelsius": temperature,
                 "fanSpeed": "auto",
                 "running": False,
                 "lastAdapterFrame": "",
             }
         )
-        return [air_conditioner]
+        return air_conditioner
 
     def execute(
         self,
@@ -342,6 +392,71 @@ class AirConditionerDriver(DeviceDriver):
             raise GatewayError(INVALID_COMMAND, "空调动作不受支持")
         adapter = get_adapter(device["brand"])
         device["lastAdapterFrame"] = adapter.encode(command)
+
+
+class BathHeaterDriver(DeviceDriver):
+    """A bathroom heater that belongs to the environment category."""
+
+    device_type = "bathHeater"
+    tick_priority = 25
+
+    def create_devices(self) -> list[dict[str, Any]]:
+        bath_heater = base_device(
+            "bath-heater-bathroom-01", "浴室智能浴霸", "bathroom", self.device_type
+        )
+        bath_heater.update(
+            {
+                "_categoryId": "environment",
+                "state": {"power": False, "mode": "warm"},
+                "controls": [
+                    {
+                        "id": "power",
+                        "kind": "toggle",
+                        "label": "开关",
+                        "action": "setPower",
+                        "stateKey": "power",
+                        "payloadKey": "power",
+                        "primary": True,
+                    },
+                    {
+                        "id": "mode",
+                        "kind": "enum",
+                        "label": "工作模式",
+                        "action": "setMode",
+                        "stateKey": "mode",
+                        "payloadKey": "mode",
+                        "options": [
+                            {"value": "warm", "label": "暖风"},
+                            {"value": "ventilate", "label": "换气"},
+                            {"value": "dry", "label": "干燥"},
+                        ],
+                    },
+                ],
+            }
+        )
+        return [bath_heater]
+
+    def execute(
+        self,
+        device: dict[str, Any],
+        action: str,
+        payload: dict[str, object],
+        context: DriverContext,
+    ) -> None:
+        state = device["state"]
+        if action == "setPower":
+            power = payload.get("power")
+            if not isinstance(power, bool):
+                raise GatewayError(INVALID_COMMAND, "浴霸开关参数无效")
+            state["power"] = power
+            return
+        if action == "setMode":
+            mode = payload.get("mode")
+            if not isinstance(mode, str) or mode not in {"warm", "ventilate", "dry"}:
+                raise GatewayError(INVALID_COMMAND, "浴霸工作模式无效")
+            state["mode"] = mode
+            return
+        raise GatewayError(INVALID_COMMAND, "浴霸动作不受支持")
 
 
 class DoorLockDriver(DeviceDriver):
@@ -444,9 +559,16 @@ class CurtainDriver(DeviceDriver):
         ]
 
     def create_devices(self) -> list[dict[str, Any]]:
-        curtain = base_device(
-            "curtain-living-01", "客厅智能窗帘", "living", self.device_type
-        )
+        return [
+            self._curtain("curtain-living-01", "客厅智能窗帘", "living"),
+            self._curtain("curtain-master-01", "主卧智能窗帘", "masterBedroom"),
+            self._curtain("curtain-bedroom-01", "次卧智能窗帘", "bedroom"),
+        ]
+
+    def _curtain(
+        self, device_id: str, name: str, room_id: str
+    ) -> dict[str, Any]:
+        curtain = base_device(device_id, name, room_id, self.device_type)
         curtain.update(
             {
                 "_categoryId": "curtains",
@@ -491,7 +613,7 @@ class CurtainDriver(DeviceDriver):
                 ],
             }
         )
-        return [curtain]
+        return curtain
 
     def execute(
         self,

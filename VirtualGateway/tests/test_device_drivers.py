@@ -123,6 +123,40 @@ def test_generic_devices_must_reference_a_registered_category(
         registry.register_driver(MissingCategoryDriver())
 
 
+def test_default_registry_restores_bedroom_devices_and_bath_heater(
+    storage: GatewayStorage,
+) -> None:
+    registry = DeviceRegistry(storage)
+    expected_ids = {
+        "light-master-01",
+        "light-bedroom-01",
+        "env-master-01",
+        "env-bedroom-01",
+        "ac-master-01",
+        "ac-bedroom-01",
+        "curtain-master-01",
+        "curtain-bedroom-01",
+        "bath-heater-bathroom-01",
+    }
+
+    assert expected_ids.issubset(registry.devices)
+    assert registry.categories["environment"]["title"] == "环境"
+    bath_heater = registry.get("bath-heater-bathroom-01")
+    assert bath_heater["_categoryId"] == "environment"
+    public_bath_heater = next(
+        item
+        for item in registry.snapshot()
+        if item["id"] == bath_heater["id"]
+    )
+    assert public_bath_heater["category"]["id"] == "environment"
+
+    result, _ = registry.execute(
+        bath_heater["id"], "setPower", {"power": True}, bath_heater["stateVersion"]
+    )
+    assert result is not None
+    assert result["state"]["power"] is True
+
+
 def test_curtain_commands_and_ticks_progress_authoritative_state(
     storage: GatewayStorage,
 ) -> None:
