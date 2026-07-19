@@ -36,6 +36,27 @@ python -m pip install -r requirements.txt
 
 演示证书和调试配对机制仅用于本地开发，不适用于生产环境。
 
+## 二维码注册与移除
+
+VirtualGateway 为本地演示提供受维护令牌保护的签发接口：`POST /admin/v1/devices/provision`。它为设备声明签发可长期保存的 ES256 设备身份证书（紧凑 JWS）；私钥自动保存在被 Git 忽略的 `data/device_provisioning.key`，不会传给 App 或二维码生成器。证书可贴在设备上并重复扫描，不包含有效期或一次性标识。
+
+使用相邻目录的生成器可创建实际可加入 App 的浴室灯二维码：
+
+```powershell
+cd ..\QRgeneration
+python .\generation_device_qr.py `
+  --device-id LIGHT-BATHROOM-QR-001 `
+  --device-name "浴室智能灯" `
+  --device-type light `
+  --category-id lighting `
+  --capabilities setPower,setBrightness,setAutomationConfig `
+  --admin-token '<启动日志中的 X-Admin-Token>'
+```
+
+App 配对后调用 `POST /api/v1/devices/register`。网关校验证书签名、签发者、受众和全部声明；随后由对应 `DeviceDriver` 对设备类型、功能分类、能力集合及在线状态执行接入探测，探测通过才写入快照。同一设备二维码可重复扫描（结果幂等）；删除后可用原二维码重新加入。由该链路加入的设备会在快照中标记 `removable: true`，App 可通过 `DELETE /api/v1/devices/{deviceId}` 删除它；预置演示设备不能被删除。
+
+当前二维码注册支持四类虚拟设备：`light` / `lighting` 必须声明 `setPower`、`setBrightness`、`setAutomationConfig`；`environment` / `environment` 必须声明 `reportTemperature`、`reportHumidity`、`reportIlluminance`、`reportPresence`，用于浴室环境监测器；`airConditioner` / `environment` 必须声明 `setPower`、`setMode`、`setTemperature`、`setFanSpeed`、`setDehumidify`、`setBrand`；`humidifier` / `environment` 必须声明 `setPower`、`setTargetHumidity`。
+
 ## 新设备驱动扩展
 
 网关通过 `DeviceDriver` 显式注册设备族：

@@ -41,6 +41,12 @@ export class ConnectionState {
   static readonly CLOSED: string = 'closed';
 }
 
+export class RoomInfo {
+  id: string = '';
+  name: string = '';
+  selectable: boolean = false;
+}
+
 export class AutomationConfig {
   enabled: boolean = false;
   illuminanceThresholdLux: number = 100;
@@ -88,6 +94,7 @@ export class BaseDevice {
   roomId: string = '';
   type: string = '';
   online: boolean = false;
+  removable: boolean = false;
   stateVersion: number = 0;
   updatedAt: string = '';
 }
@@ -199,6 +206,21 @@ function requireBoolean(raw: Record<string, Object>, key: string): boolean {
   return value;
 }
 
+function optionalBoolean(
+  raw: Record<string, Object>,
+  key: string,
+  fallback: boolean = false
+): boolean {
+  const value = raw[key];
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (typeof value !== 'boolean') {
+    throw new Error('Invalid boolean field: ' + key);
+  }
+  return value;
+}
+
 function requireNumber(
   raw: Record<string, Object>,
   key: string,
@@ -246,6 +268,7 @@ function copyBase(device: BaseDevice, raw: Record<string, Object>): void {
   device.name = requireString(raw, 'name');
   device.roomId = requireString(raw, 'roomId');
   device.online = requireBoolean(raw, 'online');
+  device.removable = optionalBoolean(raw, 'removable');
   device.stateVersion = requireNumber(raw, 'stateVersion', 0, Number.MAX_SAFE_INTEGER, true);
   device.updatedAt = requireString(raw, 'updatedAt');
 }
@@ -364,6 +387,30 @@ export function parseDevices(value: Object): DeviceInfo[] {
         throw new Error(message);
       }
     }
+  }
+  return result;
+}
+
+export function parseRoom(value: Object): RoomInfo {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Room must be an object');
+  }
+  const raw = value as Record<string, Object>;
+  const room = new RoomInfo();
+  room.id = requireString(raw, 'id');
+  room.name = requireString(raw, 'name');
+  room.selectable = requireBoolean(raw, 'selectable');
+  return room;
+}
+
+export function parseRooms(value: Object): RoomInfo[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Room snapshot must be an array');
+  }
+  const result: RoomInfo[] = [];
+  const rawRooms = value as Object[];
+  for (let index = 0; index < rawRooms.length; index++) {
+    result.push(parseRoom(rawRooms[index]));
   }
   return result;
 }

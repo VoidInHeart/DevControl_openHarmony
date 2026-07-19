@@ -15,6 +15,8 @@ import {
   EnvironmentHistoryPoint,
   GatewaySession,
   LightDevice,
+  RoomInfo,
+  parseRoom,
   parseDevice,
   SceneDeviceAction,
   SceneExecutionDetail
@@ -25,6 +27,11 @@ import { DeviceSnapshotStore } from '../service/DeviceSnapshotStore';
 import { GatewaySessionStore } from '../service/GatewaySessionStore';
 import { PairingPreferenceStore } from '../service/PairingPreferenceStore';
 import { WssGatewayTransport } from '../service/WssGatewayTransport';
+import {
+  DeviceRemovalResult,
+  DeviceRegistrationRequest,
+  DeviceRegistrationResult
+} from '../service/DeviceRegistration';
 import { DeviceRegistry } from './DeviceRegistry';
 import {
   DeviceControl,
@@ -35,6 +42,7 @@ import {
 @Observed
 export class DeviceManager implements GatewayTransportListener {
   devices: DeviceInfo[] = [];
+  rooms: RoomInfo[] = [];
   deviceStateRevision: number = 0;
   accessLogs: AccessLogEntry[] = [];
   alerts: AlertEntry[] = [];
@@ -45,7 +53,7 @@ export class DeviceManager implements GatewayTransportListener {
   initialized: boolean = false;
   pairingBusy: boolean = false;
   gatewayAddress: string = '';
-  lastGatewayAddress: string = 'https://192.168.1.100:8443';
+  lastGatewayAddress: string = '';
   lastError: string = '';
   lastErrorCode: string = '';
   lastSyncAt: number = 0;
@@ -187,6 +195,7 @@ export class DeviceManager implements GatewayTransportListener {
     }
     this.session = null;
     this.devices = [];
+    this.rooms = [];
     this.bumpDeviceStateRevision();
     this.accessLogs = [];
     this.alerts = [];
@@ -235,6 +244,25 @@ export class DeviceManager implements GatewayTransportListener {
       }
       return;
     }
+    if (type === 'device.removed') {
+      const deviceId = message['deviceId'];
+      if (typeof deviceId === 'string') {
+        this.devices = this.devices.filter((device: DeviceInfo) => device.id !== deviceId);
+        this.bumpDeviceStateRevision();
+      }
+      return;
+    }
+    if (type === 'room.created') {
+      const rawRoom = message['room'];
+      if (typeof rawRoom === 'object' && rawRoom !== null && !Array.isArray(rawRoom)) {
+        try {
+          this.upsertRoom(parseRoom(rawRoom as Record<string, Object>));
+        } catch (error) {
+          this.setError('INVALID_COMMAND', '网关房间字段校验失败');
+        }
+      }
+      return;
+    }
     if (type === 'command.result') {
       this.handleCommandResult(message);
       return;
@@ -252,13 +280,15 @@ export class DeviceManager implements GatewayTransportListener {
     this.setError(code, message);
   }
 
-  async refreshAll(): Promise<void> {
+  async refreshAll(): Promise<boolean> {
     if (this.session === null) {
-      return;
+      return false;
     }
     try {
       const snapshot = await this.transport.fetchDeviceSnapshot();
+      const rooms = await this.transport.fetchRooms();
       this.devices = snapshot;
+      this.rooms = rooms;
       this.bumpDeviceStateRevision();
       this.lastSyncAt = Date.now();
       if (this.snapshotStore !== null) {
@@ -270,11 +300,137 @@ export class DeviceManager implements GatewayTransportListener {
       this.lastError = '';
       await this.refreshLogs();
       await this.refreshEnvironmentHistory();
+      return true;
     } catch (error) {
       this.setErrorFromException(error);
       if (this.lastErrorCode === 'AUTH_FAILED') {
         this.invalidateSession(this.lastError);
       }
+      return false;
+    }
+  }
+
+  /**
+   * The gateway verifies the signed QR proof, registers the device and probes
+   * every requested capability. The App then verifies the authenticated
+   * snapshot before presenting registration as successful.
+   */
+  async registerDevice(request: DeviceRegistrationRequest): Promise<DeviceRegistrationResult> {
+    const result = new DeviceRegistrationResult();
+    if (!this.isOnline()) {
+      result.message = '网关离线，无法验证并注册设备';
+      return result;
+    }
+    try {
+      const receipt = await this.transport.registerDevice(request);
+      if (!receipt.accepted) {
+        result.message = '网关未接受该设备的认证信息';
+        return result;
+      }
+      if (!receipt.online) {
+        result.message = '设备已认证，但未通过网关在线探测';
+        return result;
+      }
+      const snapshotSynchronized = await this.refreshAll();
+      if (!snapshotSynchronized) {
+        result.message = '网关注册成功，但设备快照同步失败';
+        return result;
+      }
+      const device = this.getDeviceById(request.deviceId);
+      if (device === null || !device.online) {
+        result.message = '网关尚未同步到在线设备，请稍后重试';
+        return result;
+      }
+      if (device.name !== request.deviceName) {
+        result.message = '网关返回的设备名称与二维码不一致';
+        return result;
+      }
+      if (device.roomId !== request.roomId) {
+        result.message = '网关返回的所属房间与所选房间不一致';
+        return result;
+      }
+      if (device.type !== request.deviceType) {
+        result.message = '网关返回的设备类型与二维码不一致';
+        return result;
+      }
+      if (!this.matchesRegistrationCategory(device, request.categoryId)) {
+        result.message = '网关返回的设备分类与二维码不一致';
+        return result;
+      }
+      if (!this.matchesRegistrationCapabilities(device, request.capabilities)) {
+        result.message = '设备未通过全部能力接口校验';
+        return result;
+      }
+      result.registered = true;
+      result.online = true;
+      result.message = '设备已注册并通过网关在线校验';
+      return result;
+    } catch (error) {
+      const registrationFailure = this.registrationFailureMessage(error);
+      if (registrationFailure.length > 0) {
+        this.setError('DEVICE_PROOF_INVALID', registrationFailure);
+        result.message = registrationFailure;
+        return result;
+      }
+      this.setErrorFromException(error);
+      result.message = this.lastError.length > 0 ? this.lastError : '设备注册失败';
+      return result;
+    }
+  }
+
+  async deleteDevice(deviceId: string): Promise<DeviceRemovalResult> {
+    const result = new DeviceRemovalResult();
+    const device = this.getDeviceById(deviceId);
+    if (device === null) {
+      result.message = '设备不存在或已被移除';
+      return result;
+    }
+    if (!device.removable) {
+      result.message = '该内置设备不支持移除';
+      return result;
+    }
+    if (!this.isOnline()) {
+      result.message = '网关离线，无法移除设备';
+      return result;
+    }
+    try {
+      const receipt = await this.transport.deleteDevice(deviceId);
+      if (!receipt.deleted) {
+        result.message = '网关未移除该设备';
+        return result;
+      }
+      const snapshotSynchronized = await this.refreshAll();
+      if (!snapshotSynchronized) {
+        result.message = '网关已移除设备，但设备快照同步失败';
+        return result;
+      }
+      if (this.getDeviceById(deviceId) !== null) {
+        result.message = '网关快照中仍存在该设备';
+        return result;
+      }
+      result.deleted = true;
+      result.message = '设备已移除';
+      return result;
+    } catch (error) {
+      this.setErrorFromException(error);
+      result.message = this.lastError.length > 0 ? this.lastError : '设备移除失败';
+      return result;
+    }
+  }
+
+  async createRoom(roomId: string, name: string): Promise<RoomInfo | null> {
+    if (!this.isOnline()) {
+      this.setError('AUTH_FAILED', '网关离线，无法新建房间');
+      return null;
+    }
+    try {
+      const room = await this.transport.createRoom(roomId, name);
+      this.upsertRoom(room);
+      this.lastError = '';
+      return room;
+    } catch (error) {
+      this.setErrorFromException(error);
+      return null;
     }
   }
 
@@ -337,6 +493,25 @@ export class DeviceManager implements GatewayTransportListener {
 
   getRoomIds(): string[] {
     return DeviceRegistry.getRoomIds(this.devices);
+  }
+
+  getSelectableRooms(): RoomInfo[] {
+    const result: RoomInfo[] = [];
+    for (let index = 0; index < this.rooms.length; index++) {
+      if (this.rooms[index].selectable) {
+        result.push(this.rooms[index]);
+      }
+    }
+    return result;
+  }
+
+  getRoomName(roomId: string): string {
+    for (let index = 0; index < this.rooms.length; index++) {
+      if (this.rooms[index].id === roomId) {
+        return this.rooms[index].name;
+      }
+    }
+    return DeviceRegistry.getRoomLabel(roomId);
   }
 
   getLights(): LightDevice[] {
@@ -563,6 +738,31 @@ export class DeviceManager implements GatewayTransportListener {
     }
   }
 
+  private matchesRegistrationCategory(device: DeviceInfo, categoryId: string): boolean {
+    if (device.type === DeviceType.LIGHT) {
+      return categoryId === 'lighting';
+    }
+    if (
+      device.type === DeviceType.ENVIRONMENT ||
+      device.type === DeviceType.AIR_CONDITIONER
+    ) {
+      return categoryId === 'environment';
+    }
+    if (device.type === DeviceType.DOOR_LOCK) {
+      return categoryId === 'locks';
+    }
+    return (device as GenericDevice).category.id === categoryId;
+  }
+
+  private matchesRegistrationCapabilities(device: DeviceInfo, capabilities: string[]): boolean {
+    for (let index = 0; index < capabilities.length; index++) {
+      if (!DeviceRegistry.supportsDeviceAction(device, capabilities[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private async connectAndSync(): Promise<void> {
     await this.transport.connect(this);
     await this.refreshAll();
@@ -697,6 +897,23 @@ export class DeviceManager implements GatewayTransportListener {
     this.devices = result;
     this.bumpDeviceStateRevision();
     this.lastSyncAt = Date.now();
+  }
+
+  private upsertRoom(incoming: RoomInfo): void {
+    const result: RoomInfo[] = [];
+    let found = false;
+    for (let index = 0; index < this.rooms.length; index++) {
+      if (this.rooms[index].id === incoming.id) {
+        result.push(incoming);
+        found = true;
+      } else {
+        result.push(this.rooms[index]);
+      }
+    }
+    if (!found) {
+      result.push(incoming);
+    }
+    this.rooms = result;
   }
 
   private handleCommandResult(message: Record<string, Object>): void {
@@ -834,6 +1051,22 @@ export class DeviceManager implements GatewayTransportListener {
     }
   }
 
+  private registrationFailureMessage(error: Object): string {
+    const text = error instanceof Error ? error.message : JSON.stringify(error);
+    const separator = text.indexOf(':');
+    if (separator <= 0) {
+      return '';
+    }
+    const code = text.substring(0, separator);
+    const detail = text.substring(separator + 1);
+    const isDeviceProof = code === 'DEVICE_PROOF_INVALID' ||
+      (code === 'AUTH_FAILED' && detail.indexOf('设备认证证明') >= 0);
+    if (isDeviceProof) {
+      return '设备二维码未通过当前网关证书认证，请检查二维码所属网关';
+    }
+    return '';
+  }
+
   private setError(code: string, message: string): void {
     this.lastErrorCode = code;
     this.lastError = native.redactDiagnostic(message);
@@ -841,7 +1074,13 @@ export class DeviceManager implements GatewayTransportListener {
 
   private errorMessage(code: string, fallback: string): string {
     if (code === 'AUTH_FAILED') {
+      if (fallback.indexOf('网关已重启') >= 0) {
+        return '网关已重启，安全会话已失效，请重新配对';
+      }
       return '会话已失效，请重新配对';
+    }
+    if (code === 'DEVICE_PROOF_INVALID') {
+      return '设备二维码未通过当前网关证书认证，请检查二维码所属网关';
     }
     if (code === 'DEVICE_OFFLINE') {
       return '目标设备离线';

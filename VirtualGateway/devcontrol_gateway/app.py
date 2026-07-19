@@ -23,10 +23,13 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .config import GatewayConfig
 from .errors import AUTH_FAILED, GatewayError
 from .models import (
+    DeviceProvisionRequest,
+    DeviceRegistrationRequest,
     EnvironmentInjection,
     FaultRequest,
     PairRequest,
     PROTOCOL_VERSION,
+    RoomCreateRequest,
     SecureCommandEnvelope,
 )
 from .security import ClientSession, now_ms
@@ -308,6 +311,60 @@ def create_app(
             "devices": gateway.devices.snapshot(),
         }
 
+    @app.get("/api/v1/rooms")
+    async def rooms(
+        session: ClientSession = Depends(require_session),
+    ) -> dict[str, object]:
+        del session
+        return {
+            "protocolVersion": PROTOCOL_VERSION,
+            "rooms": gateway.rooms_snapshot(),
+        }
+
+    @app.post("/api/v1/rooms")
+    async def create_room(
+        body: RoomCreateRequest,
+        session: ClientSession = Depends(require_session),
+    ) -> dict[str, object]:
+        room = await gateway.create_room(session, body)
+        await gateway.broadcast(
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "type": "room.created",
+                "room": room,
+            }
+        )
+        return {"room": room}
+
+    @app.post("/api/v1/devices/register")
+    async def register_device(
+        body: DeviceRegistrationRequest,
+        session: ClientSession = Depends(require_session),
+    ) -> dict[str, object]:
+        device = await gateway.register_device(session, body)
+        await gateway.broadcast(gateway.state_event(device))
+        return {
+            "deviceId": body.deviceId,
+            "accepted": True,
+            "online": bool(device["online"]),
+        }
+
+    @app.delete("/api/v1/devices/{device_id}")
+    async def delete_device(
+        device_id: str,
+        session: ClientSession = Depends(require_session),
+    ) -> dict[str, object]:
+        removed = await gateway.delete_device(session, device_id)
+        await gateway.broadcast(
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "type": "device.removed",
+                "timestamp": now_ms(),
+                "deviceId": removed["id"],
+            }
+        )
+        return {"deviceId": removed["id"], "deleted": True}
+
     @app.get("/api/v1/logs")
     async def logs(
         session: ClientSession = Depends(require_session),
@@ -538,6 +595,17 @@ def create_admin_app(
         for alert in service.devices.drain_alerts():
             await service.broadcast(alert)
         return {"device": device}
+
+    @app.post("/admin/v1/devices/provision")
+    async def provision_device(
+        body: DeviceProvisionRequest,
+        authorized: None = Depends(require_admin),
+    ) -> dict[str, object]:
+        del authorized
+        return {
+            "gatewayProofFormat": "jws",
+            "gatewayProof": service.issue_registration_proof(body),
+        }
 
     @app.post("/admin/v1/environment/inject")
     async def environment(

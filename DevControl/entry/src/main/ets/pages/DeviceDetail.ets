@@ -13,6 +13,8 @@ import { DeviceRegistry } from '../model/DeviceRegistry';
 struct DeviceDetail {
   @Provide deviceManager: DeviceManager = DeviceApplication.getDeviceManager();
   @State deviceId: string = '';
+  @State isDeleting: boolean = false;
+  @State deleteMessage: string = '';
 
   aboutToAppear(): void {
     const params = router.getParams() as Record<string, Object>;
@@ -25,6 +27,14 @@ struct DeviceDetail {
   build() {
     Column() {
       this.NavigationHeader()
+      if (this.deleteMessage.length > 0) {
+        Text(this.deleteMessage)
+          .id('device-delete-status')
+          .fontSize(13)
+          .fontColor('#B54747')
+          .width('100%')
+          .padding({ left: 18, right: 18, bottom: 8 })
+      }
       if (this.currentDevice() === null) {
         this.EmptyState()
       } else if ((this.currentDevice() as DeviceInfo).type === DeviceType.LIGHT) {
@@ -67,6 +77,19 @@ struct DeviceDetail {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+      if (this.canDeleteCurrentDevice()) {
+        Button(this.isDeleting ? '移除中…' : '删除')
+          .id('device-delete-button')
+          .height(34)
+          .fontSize(13)
+          .fontColor(Color.White)
+          .backgroundColor('#D64545')
+          .borderRadius(12)
+          .enabled(!this.isDeleting && this.deviceManager.isOnline())
+          .onClick(() => {
+            this.deleteCurrentDevice();
+          })
+      }
     }
     .width('100%')
     .height(64)
@@ -105,5 +128,28 @@ struct DeviceDetail {
   private currentRoom(): string {
     const device = this.currentDevice();
     return device === null ? '' : DeviceRegistry.getRoomLabel(device.roomId);
+  }
+
+  private canDeleteCurrentDevice(): boolean {
+    const device = this.currentDevice();
+    return device !== null && device.removable;
+  }
+
+  private async deleteCurrentDevice(): Promise<void> {
+    if (!this.canDeleteCurrentDevice() || this.isDeleting) {
+      return;
+    }
+    this.isDeleting = true;
+    this.deleteMessage = '';
+    try {
+      const result = await this.deviceManager.deleteDevice(this.deviceId);
+      if (result.deleted) {
+        router.back();
+        return;
+      }
+      this.deleteMessage = result.message;
+    } finally {
+      this.isDeleting = false;
+    }
   }
 }

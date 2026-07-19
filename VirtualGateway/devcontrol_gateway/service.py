@@ -14,9 +14,21 @@ from .errors import (
     REPLAY_DETECTED,
     GatewayError,
 )
-from .models import PROTOCOL_VERSION, SecureCommandEnvelope
+from .models import (
+    DeviceProvisionRequest,
+    DeviceRegistrationRequest,
+    PROTOCOL_VERSION,
+    RoomCreateRequest,
+    SecureCommandEnvelope,
+)
 from .mqtt_transport import MqttBridge
-from .security import ClientSession, SessionRegistry, decrypt_payload, now_ms
+from .security import (
+    ClientSession,
+    DeviceProvisioningAuthority,
+    SessionRegistry,
+    decrypt_payload,
+    now_ms,
+)
 from .storage import GatewayStorage
 
 
@@ -35,6 +47,9 @@ class GatewayService:
             credential_ttl_seconds=config.credential_ttl_seconds,
         )
         self.devices = DeviceRegistry(self.storage, drivers=default_drivers())
+        self.provisioning = DeviceProvisioningAuthority(
+            config.provisioning_key_path()
+        )
         self._result_cache: dict[
             tuple[str, str], tuple[float, dict[str, Any]]
         ] = {}
@@ -42,6 +57,7 @@ class GatewayService:
         self._sinks: set[EventSink] = set()
         self._tasks: list[asyncio.Task[None]] = []
         self._command_lock = asyncio.Lock()
+        self._registration_lock = asyncio.Lock()
         self._closed = False
         self._mqtt_bridge = MqttBridge(config, self) if config.mqtt_enabled else None
 
@@ -120,6 +136,76 @@ class GatewayService:
             "stateVersion": device["stateVersion"],
             "device": device,
         }
+
+    def issue_registration_proof(self, declaration: DeviceProvisionRequest) -> str:
+        return self.provisioning.issue(declaration)
+
+    def rooms_snapshot(self) -> list[dict[str, Any]]:
+        return self.devices.rooms_snapshot()
+
+    async def create_room(
+        self, session: ClientSession, room: RoomCreateRequest
+    ) -> dict[str, Any]:
+        async with self._registration_lock:
+            created = await asyncio.to_thread(
+                self.devices.create_room, room.roomId, room.name
+            )
+            self.storage.record_audit(
+                timestamp_ms=now_ms(),
+                client_id=session.client_id,
+                device_id=room.roomId,
+                action="createRoom",
+                result="success",
+                error_code=None,
+                message_id="create-room-" + room.roomId,
+                details=None,
+            )
+            return created
+
+    async def register_device(
+        self, session: ClientSession, registration: DeviceRegistrationRequest
+    ) -> dict[str, Any]:
+        async with self._registration_lock:
+            proof = self.provisioning.verify(registration)
+            device = await asyncio.to_thread(
+                self.devices.register_provisioned,
+                device_id=registration.deviceId,
+                name=registration.deviceName,
+                room_id=registration.roomId,
+                device_type=registration.deviceType,
+                category_id=registration.categoryId,
+                capabilities=registration.capabilities,
+            )
+            self.storage.record_audit(
+                timestamp_ms=now_ms(),
+                client_id=session.client_id,
+                device_id=registration.deviceId,
+                action="registerDevice",
+                result="success",
+                error_code=None,
+                message_id=proof.fingerprint,
+                details=None,
+            )
+            return device
+
+    async def delete_device(
+        self, session: ClientSession, device_id: str
+    ) -> dict[str, Any]:
+        async with self._registration_lock:
+            removed = await asyncio.to_thread(
+                self.devices.remove_provisioned, device_id
+            )
+            self.storage.record_audit(
+                timestamp_ms=now_ms(),
+                client_id=session.client_id,
+                device_id=device_id,
+                action="deleteDevice",
+                result="success",
+                error_code=None,
+                message_id="delete-" + device_id,
+                details=None,
+            )
+            return removed
 
     def _prune_security_windows(self) -> None:
         cutoff = time.monotonic() - self.IDEMPOTENCY_WINDOW_SECONDS

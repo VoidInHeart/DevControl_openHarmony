@@ -41,6 +41,7 @@ export class GenericDevice {
   roomId: string = '';
   type: string = '';
   online: boolean = false;
+  removable: boolean = false;
   stateVersion: number = 0;
   updatedAt: string = '';
   category: DeviceCategory = new DeviceCategory();
@@ -262,6 +263,7 @@ export function parseGenericDevice(
   device.roomId = requireString(raw, 'roomId');
   device.type = requireIdentifier(raw, 'type');
   device.online = requireBoolean(raw, 'online');
+  device.removable = optionalBoolean(raw, 'removable');
   device.stateVersion = requireNumber(raw, 'stateVersion');
   if (
     !Number.isInteger(device.stateVersion) ||

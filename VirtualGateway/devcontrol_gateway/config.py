@@ -20,6 +20,7 @@ class GatewayConfig:
     tls_cert: Path = Path("certs/gateway.crt")
     tls_key: Path = Path("certs/gateway.key")
     database: Path = Path("data/devcontrol.db")
+    provisioning_signing_key: Path | None = None
     initial_pairing_code: str | None = None
     credential_ttl_seconds: int = 24 * 60 * 60
     admin_token: str = ""
@@ -46,6 +47,9 @@ class GatewayConfig:
             tls_cert=Path(os.getenv("DEVCONTROL_TLS_CERT", "certs/gateway.crt")),
             tls_key=Path(os.getenv("DEVCONTROL_TLS_KEY", "certs/gateway.key")),
             database=Path(os.getenv("DEVCONTROL_DATABASE", "data/devcontrol.db")),
+            provisioning_signing_key=_optional_path(
+                os.getenv("DEVCONTROL_PROVISIONING_SIGNING_KEY")
+            ),
             initial_pairing_code=os.getenv("DEVCONTROL_INITIAL_PAIRING_CODE"),
             credential_ttl_seconds=int(
                 os.getenv("DEVCONTROL_CREDENTIAL_TTL_SECONDS", "86400")
@@ -76,6 +80,11 @@ class GatewayConfig:
             max_transport_message_bytes=int(
                 os.getenv("DEVCONTROL_MAX_TRANSPORT_MESSAGE_BYTES", "65536")
             ),
+        )
+
+    def provisioning_key_path(self) -> Path:
+        return self.provisioning_signing_key or self.database.with_name(
+            "device_provisioning.key"
         )
 
     def validate(self) -> None:

@@ -19,8 +19,9 @@ import { LockIcon } from './LockIcon';
 @Component
 export struct ControlCenterTab {
   @Consume deviceManager: DeviceManager;
-  @State selectedRoom: string = 'all';
+  @StorageLink('homeSelectedRoom') selectedRoom: string = 'all';
   @State showMetricSheet: boolean = false;
+  @State showAddMenu: boolean = false;
   @State activeMetric: string = '';
   private roomSegmentsScroller: Scroller = new Scroller();
 
@@ -74,38 +75,114 @@ export struct ControlCenterTab {
 
   @Builder
   HomeHeader() {
-    Row() {
-      Column() {
-        Text('DevControl 的家')
-          .fontSize(30)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#14263A')
-        Text(this.headerSubtitle())
-          .fontSize(13)
-          .fontColor('#748294')
-          .margin({ top: 6 })
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Row() {
+        Column() {
+          Text('DevControl 的家')
+            .fontSize(30)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14263A')
+          Text(this.headerSubtitle())
+            .fontSize(13)
+            .fontColor('#748294')
+            .margin({ top: 6 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Stack({ alignContent: Alignment.Center }) {
+          Text('+')
+            .fontSize(32)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#1769C2')
+            .width('100%')
+            .height('100%')
+            .lineHeight(46)
+            .textAlign(TextAlign.Center)
+            .translate({ y: -2 })
+        }
+          .width(46)
+          .height(46)
+          .id('home-add-device-button')
+          .backgroundColor('#E4F0FF')
+          .borderRadius(23)
+          .onClick(() => {
+            this.showAddMenu = !this.showAddMenu;
+          })
       }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      Stack({ alignContent: Alignment.Center }) {
-        Image($r('app.media.nav_home'))
-          .width(24)
-          .height(24)
-          .objectFit(ImageFit.Contain)
-          .fillColor('#1769C2')
+      .width('100%')
+      if (this.showAddMenu) {
+        Column() {
+          Row() {
+            Text('▣')
+              .fontSize(20)
+              .fontColor('#1769C2')
+              .width(34)
+              .textAlign(TextAlign.Center)
+            Column() {
+              Text('添加设备')
+                .fontSize(15)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text('通过二维码安全接入')
+                .fontSize(11)
+                .fontColor('#748294')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+          }
+          .id('home-add-device-menu-item')
+          .width('100%')
+          .height(58)
+          .padding({ left: 8, right: 8 })
+          .borderRadius(12)
+          .onClick(() => {
+            this.showAddMenu = false;
+            router.pushUrl({ url: 'pages/AddDevice' });
+          })
+          Divider()
+            .color('#EDF1F5')
+          Row() {
+            Text('⌂')
+              .fontSize(22)
+              .fontColor('#1769C2')
+              .width(34)
+              .textAlign(TextAlign.Center)
+            Column() {
+              Text('添加房间')
+                .fontSize(15)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#14263A')
+              Text('新建后可用于设备归属')
+                .fontSize(11)
+                .fontColor('#748294')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+          }
+          .id('home-add-room-menu-item')
+          .width('100%')
+          .height(58)
+          .padding({ left: 8, right: 8 })
+          .borderRadius(12)
+          .onClick(() => {
+            this.showAddMenu = false;
+            router.pushUrl({ url: 'pages/AddRoom' });
+          })
+        }
+        .id('home-add-menu')
+        .width(206)
+        .padding(8)
+        .backgroundColor(Color.White)
+        .borderRadius(16)
+        .margin({ top: 56, right: 0 })
+        .zIndex(20)
       }
-        .width(46)
-        .height(46)
-        .id('home-reset-button')
-        .backgroundColor('#E4F0FF')
-        .borderRadius(23)
-        .onClick(() => {
-          this.selectedRoom = 'all';
-          this.roomSegmentsScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
-        })
     }
     .width('100%')
     .margin({ bottom: 10 })
+    .zIndex(10)
   }
 
   @Builder
@@ -1067,23 +1144,16 @@ export struct ControlCenterTab {
   }
 
   private displayRoomIds(): string[] {
-    return ['living', 'masterBedroom', 'bedroom', 'bathroom'];
+    const rooms = this.deviceManager.getSelectableRooms();
+    const result: string[] = [];
+    for (let index = 0; index < rooms.length; index++) {
+      result.push(rooms[index].id);
+    }
+    return result;
   }
 
   private roomLabel(roomId: string): string {
-    if (roomId === 'living') {
-      return '客厅';
-    }
-    if (roomId === 'bedroom') {
-      return '次卧';
-    }
-    if (roomId === 'masterBedroom') {
-      return '主卧';
-    }
-    if (roomId === 'bathroom') {
-      return '浴室';
-    }
-    return roomId;
+    return this.deviceManager.getRoomName(roomId);
   }
 
   private featureTint(featureId: string): string {
