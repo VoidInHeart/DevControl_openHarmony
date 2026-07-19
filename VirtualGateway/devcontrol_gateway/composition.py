@@ -7,6 +7,7 @@ from .drivers import (
     DeviceDriver,
     DoorLockDriver,
     EnvironmentDriver,
+    HumidifierDriver,
     LightDriver,
 )
 
@@ -16,6 +17,7 @@ def default_drivers() -> list[DeviceDriver]:
     return [
         LightDriver(),
         EnvironmentDriver(),
+        HumidifierDriver(),
         BathHeaterDriver(),
         AirConditionerDriver(),
         DoorLockDriver(),

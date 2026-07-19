@@ -158,6 +158,7 @@ def test_default_registry_restores_bedroom_devices_and_bath_heater(
         "curtain-master-01",
         "curtain-bedroom-01",
         "bath-heater-bathroom-01",
+        "humidifier-living-01",
     }
 
     assert expected_ids.issubset(registry.devices)
@@ -167,6 +168,7 @@ def test_default_registry_restores_bedroom_devices_and_bath_heater(
     assert snapshot["env-living-01"]["category"]["id"] == "environment"
     assert snapshot["ac-living-01"]["category"]["id"] == "environment"
     assert snapshot["curtain-living-01"]["category"]["id"] == "curtains"
+    assert snapshot["humidifier-living-01"]["category"]["id"] == "environment"
     assert "category" not in snapshot["door-entry-01"]
     bath_heater = registry.get("bath-heater-bathroom-01")
     assert bath_heater["_categoryId"] == "environment"
@@ -178,6 +180,16 @@ def test_default_registry_restores_bedroom_devices_and_bath_heater(
     )
     assert result is not None
     assert result["state"]["power"] is True
+
+    humidifier = registry.get("humidifier-living-01")
+    result, _ = registry.execute(
+        humidifier["id"],
+        "setTargetHumidity",
+        {"targetHumidityPercent": 60},
+        humidifier["stateVersion"],
+    )
+    assert result is not None
+    assert result["state"]["targetHumidityPercent"] == 60
 
 
 def test_curtain_commands_and_ticks_progress_authoritative_state(

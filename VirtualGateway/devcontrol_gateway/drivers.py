@@ -473,6 +473,75 @@ class BathHeaterDriver(DeviceDriver):
         raise GatewayError(INVALID_COMMAND, "浴霸动作不受支持")
 
 
+class HumidifierDriver(DeviceDriver):
+    """A living-room humidifier in the environment category."""
+
+    device_type = "humidifier"
+    tick_priority = 24
+
+    def create_devices(self) -> list[dict[str, Any]]:
+        humidifier = base_device(
+            "humidifier-living-01", "客厅加湿器", "living", self.device_type
+        )
+        humidifier.update(
+            {
+                "_categoryId": "environment",
+                "state": {"power": False, "targetHumidityPercent": 55},
+                "controls": [
+                    {
+                        "id": "power",
+                        "kind": "toggle",
+                        "label": "开关",
+                        "action": "setPower",
+                        "stateKey": "power",
+                        "payloadKey": "power",
+                        "primary": True,
+                    },
+                    {
+                        "id": "targetHumidity",
+                        "kind": "slider",
+                        "label": "目标湿度",
+                        "action": "setTargetHumidity",
+                        "stateKey": "targetHumidityPercent",
+                        "payloadKey": "targetHumidityPercent",
+                        "minimum": 35,
+                        "maximum": 75,
+                        "step": 1,
+                        "unit": "%",
+                    },
+                ],
+            }
+        )
+        return [humidifier]
+
+    def execute(
+        self,
+        device: dict[str, Any],
+        action: str,
+        payload: dict[str, object],
+        context: DriverContext,
+    ) -> None:
+        state = device["state"]
+        if action == "setPower":
+            power = payload.get("power")
+            if not isinstance(power, bool):
+                raise GatewayError(INVALID_COMMAND, "加湿器开关参数无效")
+            state["power"] = power
+            return
+        if action == "setTargetHumidity":
+            target = payload.get("targetHumidityPercent")
+            if (
+                isinstance(target, bool)
+                or not isinstance(target, (int, float))
+                or target < 35
+                or target > 75
+            ):
+                raise GatewayError(INVALID_COMMAND, "目标湿度必须在35到75之间")
+            state["targetHumidityPercent"] = int(round(target))
+            return
+        raise GatewayError(INVALID_COMMAND, "加湿器动作不受支持")
+
+
 class DoorLockDriver(DeviceDriver):
     device_type = "doorLock"
     tick_priority = 40
