@@ -1,4 +1,5 @@
 import { router } from '@kit.ArkUI';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 import {
   ACMode,
   AirConditionerDevice,
@@ -53,7 +54,7 @@ export struct ControlCenterTab {
         }
         .width('100%')
         .layoutWeight(1)
-        .padding({ left: 18, right: 18, top: 0, bottom: 0 })
+        .padding({ left: 18, right: 18, top: 0, bottom: 104 })
         .scrollBar(BarState.Off)
       }
     }
@@ -87,14 +88,11 @@ export struct ControlCenterTab {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
       Stack({ alignContent: Alignment.Center }) {
-        Text('⌂')
-          .fontSize(30)
-          .fontColor('#1769C2')
-          .width('100%')
-          .height('100%')
-          .lineHeight(46)
-          .textAlign(TextAlign.Center)
-          .translate({ y: -2 })
+        Image($r('app.media.nav_home'))
+          .width(24)
+          .height(24)
+          .objectFit(ImageFit.Contain)
+          .fillColor('#1769C2')
       }
         .width(46)
         .height(46)
@@ -126,9 +124,10 @@ export struct ControlCenterTab {
   @Builder
   TemperaturePill() {
     Column() {
-      Text('│')
-        .fontSize(20)
-        .opacity(0.85)
+      Image($r('app.media.metric_temperature'))
+        .width(22)
+        .height(22)
+        .objectFit(ImageFit.Contain)
       Text(this.averageTemperature())
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
@@ -145,6 +144,8 @@ export struct ControlCenterTab {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor('#EAF4FF')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.96 })
     .onClick(() => {
       this.openMetricSheet('temperature');
     })
@@ -153,9 +154,10 @@ export struct ControlCenterTab {
   @Builder
   HumidityPill() {
     Column() {
-      Text('●')
-        .fontSize(20)
-        .opacity(0.85)
+      Image($r('app.media.device_environment'))
+        .width(22)
+        .height(22)
+        .objectFit(ImageFit.Contain)
       Text(this.averageHumidity())
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
@@ -172,6 +174,8 @@ export struct ControlCenterTab {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor('#EEF9F4')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.96 })
     .onClick(() => {
       this.openMetricSheet('humidity');
     })
@@ -180,9 +184,10 @@ export struct ControlCenterTab {
   @Builder
   LightsPill() {
     Column() {
-      Text('○')
-        .fontSize(20)
-        .opacity(0.85)
+      Image($r('app.media.device_light'))
+        .width(22)
+        .height(22)
+        .objectFit(ImageFit.Contain)
       Text(this.lightsOnCount().toString())
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
@@ -199,6 +204,8 @@ export struct ControlCenterTab {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor('#FFF7E8')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.96 })
     .onClick(() => {
       this.openMetricSheet('lights');
     })
@@ -207,9 +214,10 @@ export struct ControlCenterTab {
   @Builder
   OnlinePill() {
     Column() {
-      Text('●')
-        .fontSize(20)
-        .opacity(0.85)
+      Image($r('app.media.metric_online'))
+        .width(22)
+        .height(22)
+        .objectFit(ImageFit.Contain)
       Text(this.onlineDeviceCount().toString())
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
@@ -226,6 +234,8 @@ export struct ControlCenterTab {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor('#F0EEFF')
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.96 })
     .onClick(() => {
       this.openMetricSheet('online');
     })
@@ -298,14 +308,16 @@ export struct ControlCenterTab {
       } else {
         ForEach(this.activeLights(), (device: LightDevice) => {
           Row() {
-            Text('○')
-              .fontSize(28)
-              .fontColor('#A46A00')
-              .width(48)
-              .height(48)
-              .textAlign(TextAlign.Center)
-              .backgroundColor('#FFF4D8')
-              .borderRadius(16)
+            Stack({ alignContent: Alignment.Center }) {
+              Image($r('app.media.device_light'))
+                .width(25)
+                .height(25)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(48)
+            .height(48)
+            .backgroundColor('#FFF4D8')
+            .borderRadius(16)
             Column() {
               Text(device.name)
                 .fontSize(16)
@@ -354,14 +366,16 @@ export struct ControlCenterTab {
         ForEach(this.scopedAirConditioners(), (device: AirConditionerDevice) => {
           Column() {
             Row() {
-              Text('❄')
-                .fontSize(24)
-                .fontColor('#1769C2')
-                .width(48)
-                .height(48)
-                .textAlign(TextAlign.Center)
-                .backgroundColor('#EAF4FF')
-                .borderRadius(16)
+              Stack({ alignContent: Alignment.Center }) {
+                Image($r('app.media.device_air_conditioner'))
+                  .width(25)
+                  .height(25)
+                  .objectFit(ImageFit.Contain)
+              }
+              .width(48)
+              .height(48)
+              .backgroundColor('#EAF4FF')
+              .borderRadius(16)
               Column() {
                 Text(device.name)
                   .fontSize(16)
@@ -460,15 +474,16 @@ export struct ControlCenterTab {
       } else {
         ForEach(this.scopedAirConditioners(), (device: AirConditionerDevice) => {
           Row() {
-            Text('❄')
-              .fontSize(23)
-              .fontColor('#1769C2')
-              .width(46)
-              .height(46)
-              .lineHeight(46)
-              .textAlign(TextAlign.Center)
-              .backgroundColor('#EAF4FF')
-              .borderRadius(15)
+            Stack({ alignContent: Alignment.Center }) {
+              Image($r('app.media.device_air_conditioner'))
+                .width(24)
+                .height(24)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(46)
+            .height(46)
+            .backgroundColor('#EAF4FF')
+            .borderRadius(15)
             Column() {
               Text(device.name)
                 .fontSize(16)
@@ -510,16 +525,16 @@ export struct ControlCenterTab {
       } else {
         ForEach(this.scopedHumidifiers(), (device: GenericDevice) => {
           Row() {
-            Text('≈')
-              .fontSize(28)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#0F8F66')
-              .width(46)
-              .height(46)
-              .lineHeight(43)
-              .textAlign(TextAlign.Center)
-              .backgroundColor('#E8F8F3')
-              .borderRadius(15)
+            Stack({ alignContent: Alignment.Center }) {
+              Image($r('app.media.device_environment'))
+                .width(24)
+                .height(24)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(46)
+            .height(46)
+            .backgroundColor('#E8F8F3')
+            .borderRadius(15)
             Column() {
               Text(device.name)
                 .fontSize(16)
@@ -690,6 +705,7 @@ export struct ControlCenterTab {
         .fontColor('#1769C2')
         .width(64)
         .height(64)
+        .lineHeight(64)
         .textAlign(TextAlign.Center)
         .backgroundColor('#F4F8FF')
         .borderRadius(24)
@@ -699,6 +715,7 @@ export struct ControlCenterTab {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(24)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 18 })
   }
 
@@ -764,6 +781,8 @@ export struct ControlCenterTab {
     .margin({ bottom: 12 })
     .borderRadius(22)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.97 })
     .onClick(() => {
       this.openFeature(feature.id);
     })
@@ -818,6 +837,9 @@ export struct ControlCenterTab {
     .margin({ bottom: 10 })
     .borderRadius(24)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
+    .alignItems(VerticalAlign.Center)
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .onClick(() => {
       router.pushUrl({
         url: 'pages/DeviceDetail',
@@ -833,6 +855,21 @@ export struct ControlCenterTab {
         LockIcon({ locked: (device as DoorLockDevice).state.locked, iconSize: badgeSize - 20 })
       } else if (this.isCurtainDevice(device)) {
         CurtainIcon({ iconSize: badgeSize - 18 })
+      } else if (device.type === DeviceType.LIGHT) {
+        Image($r('app.media.device_light'))
+          .width(badgeSize - 22)
+          .height(badgeSize - 22)
+          .objectFit(ImageFit.Contain)
+      } else if (device.type === DeviceType.ENVIRONMENT) {
+        Image($r('app.media.device_environment'))
+          .width(badgeSize - 22)
+          .height(badgeSize - 22)
+          .objectFit(ImageFit.Contain)
+      } else if (device.type === DeviceType.AIR_CONDITIONER) {
+        Image($r('app.media.device_air_conditioner'))
+          .width(badgeSize - 22)
+          .height(badgeSize - 22)
+          .objectFit(ImageFit.Contain)
       } else {
         Text(this.deviceIcon(device))
           .fontSize(badgeSize - 27)

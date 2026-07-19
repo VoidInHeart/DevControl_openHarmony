@@ -1,5 +1,6 @@
 import { AccessLogEntry, AlertEntry } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 
 @Component
 export struct SettingsTab {
@@ -67,7 +68,7 @@ export struct SettingsTab {
           })
       }
       .width('100%')
-      .padding({ left: 18, right: 18, top: 42, bottom: 18 })
+      .padding({ left: 18, right: 18, top: 42, bottom: 104 })
     }
     .width('100%')
     .height('100%')
@@ -113,6 +114,8 @@ export struct SettingsTab {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(24)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .margin({ bottom: 14 })
     .onClick(() => {
       this.detailKey = 'profile';
@@ -164,6 +167,8 @@ export struct SettingsTab {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(24)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .margin({ bottom: 14 })
     .onClick(() => {
       this.detailKey = 'connection';
@@ -210,6 +215,7 @@ export struct SettingsTab {
         .fontColor('#1769C2')
         .width(40)
         .height(40)
+        .lineHeight(40)
         .textAlign(TextAlign.Center)
         .backgroundColor('#EAF4FF')
         .borderRadius(15)
@@ -234,6 +240,8 @@ export struct SettingsTab {
     .padding({ left: 14, right: 12 })
     .backgroundColor(Color.White)
     .borderRadius(18)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .margin({ bottom: 8 })
     .onClick(() => {
       this.detailKey = key;
@@ -248,6 +256,7 @@ export struct SettingsTab {
         .fontColor('#1769C2')
         .width(40)
         .height(40)
+        .lineHeight(40)
         .textAlign(TextAlign.Center)
         .backgroundColor('#EAF4FF')
         .borderRadius(15)
@@ -270,6 +279,8 @@ export struct SettingsTab {
     .padding({ left: 14, right: 12 })
     .backgroundColor(Color.White)
     .borderRadius(18)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .margin({ bottom: 8 })
     .onClick(() => {
       this.detailKey = 'security';
@@ -321,7 +332,7 @@ export struct SettingsTab {
         }
       }
       .width('100%')
-      .padding({ left: 18, right: 18, top: 42, bottom: 24 })
+      .padding({ left: 18, right: 18, top: 42, bottom: 108 })
     }
     .width('100%')
     .height('100%')
@@ -436,6 +447,7 @@ export struct SettingsTab {
     .padding(18)
     .backgroundColor(Color.White)
     .borderRadius(22)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 12 })
     .alignItems(HorizontalAlign.Start)
   }
@@ -457,6 +469,7 @@ export struct SettingsTab {
     .padding({ left: 16, right: 16 })
     .backgroundColor(Color.White)
     .borderRadius(18)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 8 })
   }
 
@@ -502,6 +515,7 @@ export struct SettingsTab {
     .padding(16)
     .backgroundColor(Color.White)
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 8 })
   }
 
@@ -525,6 +539,7 @@ export struct SettingsTab {
     .padding(16)
     .backgroundColor(Color.White)
     .borderRadius(20)
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 12 })
   }
 

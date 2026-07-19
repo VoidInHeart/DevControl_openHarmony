@@ -8,6 +8,7 @@ import {
   EnvironmentHistoryPoint
 } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 import { GenericDevice } from '../model/GenericDeviceModel';
 
 @Component
@@ -250,6 +251,7 @@ export struct TemperatureTab {
         .padding(16)
         .borderRadius(24)
         .backgroundColor('#F7FBFF')
+        .visualEffect(immersiveCardEffect())
         .margin({ bottom: 12 })
       }, (sensor: EnvironmentDevice) => sensor.id + ':' + sensor.stateVersion.toString())
     }
@@ -275,6 +277,7 @@ export struct TemperatureTab {
     .justifyContent(FlexAlign.Center)
     .backgroundColor(Color.White)
     .borderRadius(18)
+    .visualEffect(immersiveCardEffect())
     .margin({ right: 8 })
   }
 
@@ -309,6 +312,7 @@ export struct TemperatureTab {
     .padding(16)
     .borderRadius(16)
     .backgroundColor($r('app.color.card_background'))
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 16 })
   }
 
@@ -321,6 +325,7 @@ export struct TemperatureTab {
           .fontColor(device.state.power ? '#1769C2' : '#8AA0B6')
           .width(56)
           .height(56)
+          .lineHeight(56)
           .textAlign(TextAlign.Center)
           .backgroundColor(device.state.power ? '#EAF4FF' : '#EEF5FB')
           .borderRadius(20)
@@ -470,6 +475,7 @@ export struct TemperatureTab {
     .padding(16)
     .borderRadius(24)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 12 })
   }
 
@@ -543,6 +549,7 @@ export struct TemperatureTab {
     .padding(16)
     .borderRadius(24)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 12 })
   }
 
@@ -599,6 +606,7 @@ export struct TemperatureTab {
     .padding(16)
     .borderRadius(24)
     .backgroundColor('#F7FBFF')
+    .visualEffect(immersiveCardEffect())
     .margin({ bottom: 12 })
   }
 

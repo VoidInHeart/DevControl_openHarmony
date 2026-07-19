@@ -1,5 +1,6 @@
 import { CommandPayload } from '../model/DeviceModel';
 import { DeviceManager } from '../model/DeviceManager';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 import {
   DeviceControl,
   DeviceControlKind,
@@ -91,6 +92,7 @@ export struct GenericDeviceControl {
     .margin({ bottom: 12 })
     .borderRadius(18)
     .backgroundColor(Color.White)
+    .visualEffect(immersiveCardEffect())
     .alignItems(VerticalAlign.Center)
   }
 
@@ -192,6 +194,7 @@ export struct GenericDeviceControl {
     .margin({ bottom: 12 })
     .borderRadius(18)
     .backgroundColor(Color.White)
+    .visualEffect(immersiveCardEffect())
     .alignItems(HorizontalAlign.Start)
   }
 

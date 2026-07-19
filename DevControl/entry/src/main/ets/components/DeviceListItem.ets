@@ -1,4 +1,5 @@
 import { router } from '@kit.ArkUI';
+import { immersiveCardEffect } from '../common/ImmersiveUi';
 import { DeviceInfo } from '../model/DeviceModel';
 import { DeviceRegistry } from '../model/DeviceRegistry';
 import { GenericDevice } from '../model/GenericDeviceModel';
@@ -53,6 +54,8 @@ export struct DeviceListItem {
     .margin({ bottom: 10 })
     .borderRadius(18)
     .backgroundColor(Color.White)
+    .visualEffect(immersiveCardEffect())
+    .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
       router.pushUrl({
