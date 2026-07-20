@@ -31,6 +31,7 @@ class SceneOperationOption {
 struct Index {
   @Provide deviceManager: DeviceManager = DeviceApplication.getDeviceManager();
   @State currentTab: string = 'home';
+  @State settingsDetailVisible: boolean = false;
   @State smartDetailTemplateId: string = '';
   @State smartSavedDetailId: string = '';
   @State showCustomComposer: boolean = false;
@@ -135,7 +136,11 @@ struct Index {
   build() {
     Column() {
       if (this.deviceManager.pairingRequired) {
-        PairingPage()
+        PairingPage({
+          onPairingSucceeded: () => {
+            this.currentTab = 'home';
+          }
+        })
       } else {
         HdsTabs() {
           TabContent() {
@@ -149,7 +154,11 @@ struct Index {
           .tabBar(this.TabButton('smart', $r('app.media.nav_smart'), '智能'))
 
           TabContent() {
-            SettingsTab()
+            SettingsTab({
+              onDetailVisibilityChanged: (visible: boolean) => {
+                this.settingsDetailVisible = visible;
+              }
+            })
           }
           .tabBar(this.TabButton('settings', $r('app.media.nav_settings'), '设置'))
         }
@@ -158,12 +167,13 @@ struct Index {
         .barPosition(BarPosition.End)
         .scrollable(false)
         .barOverlap(true)
-        .barHeight(64)
+        .barHeight(this.shouldShowBottomNavigation() ? 64 : 0)
         .barFloatingStyle({
           barSideMargin: 18,
-          barBottomMargin: 16,
+          barBottomMargin: this.shouldShowBottomNavigation() ? 16 : 0,
           adaptToHandedness: true,
           lightColor: '#C9EAFF',
+          barOpacity: this.shouldShowBottomNavigation() ? 1 : 0,
           systemMaterialEffect: {
             materialType: hdsMaterial.MaterialType.ADAPTIVE,
             materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
@@ -219,6 +229,22 @@ struct Index {
       return 'settings';
     }
     return 'home';
+  }
+
+  private shouldShowBottomNavigation(): boolean {
+    if (this.currentTab === 'smart') {
+      return !this.isSmartSecondaryPage();
+    }
+    if (this.currentTab === 'settings') {
+      return !this.settingsDetailVisible;
+    }
+    return true;
+  }
+
+  private isSmartSecondaryPage(): boolean {
+    return this.sceneEditorId.length > 0 ||
+      this.smartSavedDetailId.length > 0 ||
+      this.smartDetailTemplateId.length > 0;
   }
 
   @Builder
@@ -726,7 +752,7 @@ struct Index {
           })
       }
       .width('100%')
-      .padding({ left: 18, right: 18, top: 34, bottom: 108 })
+      .padding({ left: 18, right: 18, top: 34, bottom: 28 })
     }
     .width('100%')
     .height('100%')
@@ -1081,7 +1107,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 24, right: 24, top: 42, bottom: 104 })
+    .padding({ left: 24, right: 24, top: 42, bottom: 28 })
     .backgroundColor('#DCEAF2')
   }
 
@@ -1156,7 +1182,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 24, right: 24, top: 42, bottom: 104 })
+    .padding({ left: 24, right: 24, top: 42, bottom: 28 })
     .backgroundColor('#DCEAF2')
   }
 
@@ -1355,16 +1381,12 @@ struct Index {
     }
     if (id === 'away') {
       scene.name = '离家';
-      scene.actions = [
-        this.sceneAction('light-living-01', 'off'),
-        this.sceneAction('light-living-02', 'off'),
-        this.sceneAction('light-master-01', 'off'),
-        this.sceneAction('light-bedroom-01', 'off'),
-        this.sceneAction('light-bathroom-01', 'off'),
-        this.sceneAction('ac-living-01', 'off'),
-        this.sceneAction('ac-master-01', 'off'),
-        this.sceneAction('door-entry-01', 'off')
-      ];
+      for (let index = 0; index < this.deviceManager.devices.length; index++) {
+        const device = this.deviceManager.devices[index];
+        if (device.type !== DeviceType.ENVIRONMENT) {
+          scene.actions.push(this.sceneAction(device.id, 'off'));
+        }
+      }
       return scene;
     }
     scene.name = '未命名场景';
@@ -1437,7 +1459,7 @@ struct Index {
       return '开启客厅灯光和空调，并锁门';
     }
     if (!scene.customized && scene.id === 'away') {
-      return '关闭灯光和空调，并锁门';
+      return '关闭灯光、电器和窗帘，并锁门';
     }
     let activeCount = 0;
     for (let index = 0; index < scene.actions.length; index++) {
@@ -1517,7 +1539,9 @@ struct Index {
     this.sceneEditorId = scene.id;
     this.sceneEditorName = scene.name;
     this.sceneEditorSearch = '';
-    this.sceneEditorActions = this.editorActionsFor(scene);
+    const editableScene = !scene.customized && scene.id === 'away' ?
+      this.defaultQuickScene(scene.id) : scene;
+    this.sceneEditorActions = this.editorActionsFor(editableScene);
   }
 
   private editorActionsFor(scene: SavedQuickScene): SceneDeviceAction[] {

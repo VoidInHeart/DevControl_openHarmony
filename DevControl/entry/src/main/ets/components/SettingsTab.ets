@@ -7,6 +7,8 @@ export struct SettingsTab {
   @Consume deviceManager: DeviceManager;
   @State showSecurityDetails: boolean = false;
   @State detailKey: string = '';
+  onDetailVisibilityChanged: (visible: boolean) => void = () => {
+  };
 
   build() {
     if (this.detailKey.length > 0) {
@@ -30,7 +32,7 @@ export struct SettingsTab {
         this.ProfileCard()
         this.ConnectionCard()
         this.SettingsGroup('家庭管理')
-        this.SettingRow('⌂', '家庭名称', 'DevControl 的家', 'home')
+        this.SettingRow('⌂', '家庭名称', '鸿途智联的家', 'home')
         this.SettingRow('□', '房间与设备', this.deviceManager.devices.length.toFixed(0) + ' 台设备', 'rooms')
         this.SettingRow('○', '家庭成员', '1 位成员', 'members')
 
@@ -44,7 +46,7 @@ export struct SettingsTab {
 
         this.SettingsGroup('应用')
         this.SettingRow('↻', '同步状态', this.syncSummary(), 'sync')
-        this.SettingRow('?', '关于 DevControl', '版本 1.0', 'about')
+        this.SettingRow('?', '关于鸿途智联', '版本 1.0', 'about')
 
         Button('重新连接')
           .width('100%')
@@ -93,11 +95,11 @@ export struct SettingsTab {
       .borderRadius(22)
 
       Column() {
-        Text('DevControl 用户')
+        Text('鸿途智联用户')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .fontColor('#14263A')
-        Text('管理 DevControl 的家')
+        Text('管理鸿途智联的家')
           .fontSize(13)
           .fontColor('#748294')
           .margin({ top: 5 })
@@ -118,7 +120,7 @@ export struct SettingsTab {
     .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .margin({ bottom: 14 })
     .onClick(() => {
-      this.detailKey = 'profile';
+      this.openDetail('profile');
     })
   }
 
@@ -171,7 +173,7 @@ export struct SettingsTab {
     .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .margin({ bottom: 14 })
     .onClick(() => {
-      this.detailKey = 'connection';
+      this.openDetail('connection');
     })
   }
 
@@ -244,7 +246,7 @@ export struct SettingsTab {
     .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .margin({ bottom: 8 })
     .onClick(() => {
-      this.detailKey = key;
+      this.openDetail(key);
     })
   }
 
@@ -283,7 +285,7 @@ export struct SettingsTab {
     .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.985 })
     .margin({ bottom: 8 })
     .onClick(() => {
-      this.detailKey = 'security';
+      this.openDetail('security');
     })
   }
 
@@ -298,7 +300,7 @@ export struct SettingsTab {
             .width(46)
             .height(46)
             .onClick(() => {
-              this.detailKey = '';
+              this.closeDetail();
             })
           Text(this.detailTitle())
             .fontSize(24)
@@ -332,7 +334,7 @@ export struct SettingsTab {
         }
       }
       .width('100%')
-      .padding({ left: 18, right: 18, top: 42, bottom: 108 })
+      .padding({ left: 18, right: 18, top: 42, bottom: 28 })
     }
     .width('100%')
     .height('100%')
@@ -342,8 +344,8 @@ export struct SettingsTab {
 
   @Builder
   ProfileDetail() {
-    this.DetailCard('账号', 'DevControl 用户', '当前账号用于本机演示，不绑定云端账号。')
-    this.DetailCard('家庭', 'DevControl 的家', '这里展示 App 侧家庭身份，设备状态仍由网关作为权威来源。')
+    this.DetailCard('账号', '鸿途智联用户', '当前账号用于本机演示，不绑定云端账号。')
+    this.DetailCard('家庭', '鸿途智联的家', '这里展示 App 侧家庭身份，设备状态仍由网关作为权威来源。')
   }
 
   @Builder
@@ -360,7 +362,7 @@ export struct SettingsTab {
 
   @Builder
   HomeDetail() {
-    this.DetailCard('家庭名称', 'DevControl 的家', '当前为演示家庭，后续可以扩展成可编辑名称。')
+    this.DetailCard('家庭名称', '鸿途智联的家', '当前为演示家庭，后续可以扩展成可编辑名称。')
     this.DetailCard('家庭概况', this.deviceManager.devices.length.toFixed(0) + ' 台设备',
       this.deviceManager.getOnlineCount().toFixed(0) + ' 台在线，' +
         this.deviceManager.getOfflineCount().toFixed(0) + ' 台离线。')
@@ -384,7 +386,7 @@ export struct SettingsTab {
   @Builder
   ProtectionDetail() {
     this.DetailCard('传输安全', 'HTTPS / WSS', 'App 与网关之间使用加密连接。')
-    this.DetailCard('证书信任', 'DevControl Demo CA', '演示环境内置 CA，并进行证书校验。')
+    this.DetailCard('证书信任', '鸿途智联 Demo CA', '演示环境内置 CA，并进行证书校验。')
     this.DetailCard('命令保护', 'AES-256-GCM', '控制命令带有时间戳、nonce 和消息编号，便于防重放和审计。')
     this.ErrorCodeSection()
   }
@@ -417,7 +419,7 @@ export struct SettingsTab {
 
   @Builder
   AboutDetail() {
-    this.DetailCard('DevControl', '版本 1.0', '家庭设备控制与虚拟网关演示 App。')
+    this.DetailCard('鸿途智联', '版本 1.0', '家庭设备控制与虚拟网关演示 App。')
     this.DetailCard('适配说明', '模拟品牌适配器',
       '海尔、格力、美的均为模拟适配器，不代表真实厂商协议兼容或认证。')
     this.DetailCard('项目定位', '软件侧严格模拟',
@@ -579,6 +581,16 @@ export struct SettingsTab {
     });
   }
 
+  private openDetail(key: string): void {
+    this.detailKey = key;
+    this.onDetailVisibilityChanged(true);
+  }
+
+  private closeDetail(): void {
+    this.detailKey = '';
+    this.onDetailVisibilityChanged(false);
+  }
+
   private alertSummary(): string {
     if (this.deviceManager.alerts.length === 0) {
       return '无新告警';
@@ -615,7 +627,7 @@ export struct SettingsTab {
     if (this.detailKey === 'sync') {
       return '同步状态';
     }
-    return '关于 DevControl';
+    return '关于鸿途智联';
   }
 
   private logSummary(): string {

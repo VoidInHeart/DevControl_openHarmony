@@ -5,6 +5,8 @@ export struct PairingPage {
   @Consume deviceManager: DeviceManager;
   @State gatewayAddress: string = '';
   @State pairingCode: string = '';
+  onPairingSucceeded: () => void = () => {
+  };
 
   aboutToAppear(): void {
     if (this.deviceManager.lastGatewayAddress.length > 0) {
@@ -15,7 +17,7 @@ export struct PairingPage {
   build() {
     Scroll() {
       Column() {
-        Text('DevControl')
+        Text('鸿途智联')
           .fontSize(32)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary'))
@@ -57,7 +59,12 @@ export struct PairingPage {
             .enabled(!this.deviceManager.pairingBusy)
             .opacity(this.deviceManager.pairingBusy ? 0.6 : 1)
             .onClick(() => {
-              this.deviceManager.pairGateway(this.gatewayAddress, this.pairingCode);
+              this.deviceManager.pairGateway(this.gatewayAddress, this.pairingCode)
+                .then((paired: boolean) => {
+                  if (paired) {
+                    this.onPairingSucceeded();
+                  }
+                });
             })
 
           if (this.deviceManager.lastError.length > 0) {
