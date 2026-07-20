@@ -23,8 +23,8 @@ function testSession(): GatewaySession {
 export default function gatewaySessionStoreTest() {
   describe('GatewaySessionStoreTest', () => {
     it('restoresValidSessionAndRejectsTamperedAuthTag', 0, async () => {
-      const context = abilityDelegatorRegistry.getAbilityDelegator()
-        .getAppContext() as common.UIAbilityContext;
+      const context = (await abilityDelegatorRegistry.getAbilityDelegator()
+        .getCurrentTopAbility()).context as common.UIAbilityContext;
       const preferencesStore = await preferences.getPreferences(
         context,
         PREFERENCES_NAME

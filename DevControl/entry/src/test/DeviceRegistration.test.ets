@@ -25,7 +25,8 @@ export default function deviceRegistrationTest() {
       expect(request.deviceName).assertEqual('测试窗帘');
       expect(request.deviceType).assertEqual('curtain');
       expect(request.categoryId).assertEqual('curtains');
-      expect(request.roomId).assertEqual('living');
+      // Room assignment is chosen by the App, not the signed QR declaration.
+      expect(request.roomId).assertEqual('');
       expect(request.capabilities.length).assertEqual(2);
       expect(request.gatewayProofFormat).assertEqual('jws');
     });
@@ -89,7 +90,7 @@ export default function deviceRegistrationTest() {
       expect(uriRejected).assertTrue();
     });
 
-    it('requires a usable device name and room id', 0, () => {
+    it('requires a usable device name and ignores a QR supplied room id', 0, () => {
       const blankName = JSON.parse(validRegistrationText()) as Record<string, Object>;
       blankName['deviceName'] = '   ';
       let blankNameRejected = false;
@@ -101,15 +102,10 @@ export default function deviceRegistrationTest() {
 
       const invalidRoom = JSON.parse(validRegistrationText()) as Record<string, Object>;
       invalidRoom['roomId'] = 'living room';
-      let invalidRoomRejected = false;
-      try {
-        DeviceRegistrationQr.parse(JSON.stringify(invalidRoom));
-      } catch (error) {
-        invalidRoomRejected = true;
-      }
+      const parsed = DeviceRegistrationQr.parse(JSON.stringify(invalidRoom));
 
       expect(blankNameRejected).assertTrue();
-      expect(invalidRoomRejected).assertTrue();
+      expect(parsed.roomId).assertEqual('');
     });
   });
 }

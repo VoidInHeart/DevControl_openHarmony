@@ -1,6 +1,7 @@
 const NativeMock: Record<string, Object> = {
   'generateMessageId': (): string => 'mock-message-id-000000000000',
-  'generateNonce': (): string => 'mock-nonce-0000',
+  // URL-safe Base64 encoding of 12 bytes, matching the HUKS AES-GCM IV size.
+  'generateNonce': (): string => 'AAECAwQFBgcICQoL',
   'sealCommand': (): string => {
     return JSON.stringify({
       nonce: 'mock-nonce-0000',
