@@ -7,6 +7,7 @@ import {
   serializeDevice
 } from '../main/ets/model/DeviceModel';
 import { GenericDevice } from '../main/ets/model/GenericDeviceModel';
+import { describeHttpBusinessError } from '../main/ets/service/NetworkErrorMessage';
 
 function makeLightSnapshot(): Record<string, Object> {
   const automation: Record<string, Object> = {};
@@ -121,6 +122,13 @@ export default function localUnitTest() {
       const controls = invalidSlider['controls'] as Record<string, Object>[];
       controls[0]['step'] = 0;
       expect(parseDevices([invalidSlider]).length).assertEqual(0);
+    });
+
+    it('turns NetworkKit failures into actionable pairing messages', 0, () => {
+      expect(describeHttpBusinessError(2300028)).assertContain('无法连接网关');
+      expect(describeHttpBusinessError(2300060)).assertContain('证书校验失败');
+      expect(describeHttpBusinessError(2300006)).assertContain('无法解析网关地址');
+      expect(describeHttpBusinessError(2300001)).assertContain('2300001');
     });
   });
 }

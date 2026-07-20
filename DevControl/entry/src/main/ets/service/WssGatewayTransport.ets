@@ -17,6 +17,7 @@ import {
   DeviceRegistrationRequest
 } from './DeviceRegistration';
 import { GatewayTransport, GatewayTransportListener } from './GatewayTransport';
+import { describeHttpBusinessError } from './NetworkErrorMessage';
 
 class SealedParts {
   nonce: string = '';
@@ -413,7 +414,16 @@ export class WssGatewayTransport implements GatewayTransport {
       if (this.caPath.length > 0) {
         options.caPath = this.caPath;
       }
-      const response = await request.request(url, options);
+      let response: http.HttpResponse;
+      try {
+        response = await request.request(url, options);
+      } catch (error) {
+        const businessError = error as BusinessError;
+        if (typeof businessError.code === 'number') {
+          throw new Error(describeHttpBusinessError(businessError.code));
+        }
+        throw new Error('NETWORK_ERROR:' + this.describeError(error as Object, '网络请求失败'));
+      }
       const text = response.result as string;
       const parsed = JSON.parse(text) as Record<string, Object>;
       if (response.responseCode < 200 || response.responseCode >= 300) {
