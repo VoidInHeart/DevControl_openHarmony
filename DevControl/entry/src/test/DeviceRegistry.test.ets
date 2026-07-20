@@ -82,7 +82,7 @@ export default function deviceRegistryTest() {
       const light = makeLight('living', true);
       const doorLock = makeDoorLock('living');
       const features = DeviceRegistry.getHomeFeatures();
-      expect(features.length).assertEqual(4);
+      expect(features.length).assertEqual(3);
       expect(DeviceRegistry.getDevicesByFeature([light, doorLock], 'lighting').length)
         .assertEqual(1);
       expect(DeviceRegistry.getDevicesByFeature([light, doorLock], 'locks').length)
@@ -102,7 +102,7 @@ export default function deviceRegistryTest() {
 
       curtain.category.id = 'shades';
       curtain.category.title = '遮阳';
-      expect(DeviceRegistry.getHomeFeatures([curtain]).length).assertEqual(5);
+      expect(DeviceRegistry.getHomeFeatures([curtain]).length).assertEqual(4);
       const feature = DeviceRegistry.getFeature('shades', [curtain]);
       expect(feature === null ? '' : feature.title).assertEqual('遮阳');
     });

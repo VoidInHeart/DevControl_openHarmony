@@ -64,8 +64,8 @@ function sampleRules(): SavedSmartRules {
 export default function smartRuleStoreTest() {
   describe('SmartRuleStoreTest', () => {
     it('persistsRulesAndCustomSceneActions', 0, async () => {
-      const context = abilityDelegatorRegistry.getAbilityDelegator()
-        .getAppContext() as common.UIAbilityContext;
+      const context = (await abilityDelegatorRegistry.getAbilityDelegator()
+        .getCurrentTopAbility()).context as common.UIAbilityContext;
       const preferencesStore = await preferences.getPreferences(context, PREFERENCES_NAME);
       const previous = await preferencesStore.get(SMART_RULES_KEY, '') as string;
       const store = new SmartRuleStore(context);
