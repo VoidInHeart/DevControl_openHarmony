@@ -29,7 +29,7 @@ class GatewayConfig:
     mqtt_enabled: bool = False
     mqtt_host: str = ""
     mqtt_port: int = 8883
-    mqtt_ca: Path = Path("certs/demo-ca.crt")
+    mqtt_ca: Path = Path("certs/mqtt-ca.crt")
     mqtt_client_cert: Path | None = None
     mqtt_client_key: Path | None = None
     mqtt_username: str = ""
@@ -64,7 +64,7 @@ class GatewayConfig:
             mqtt_host=os.getenv("DEVCONTROL_MQTT_HOST", ""),
             mqtt_port=int(os.getenv("DEVCONTROL_MQTT_PORT", "8883")),
             mqtt_ca=Path(
-                os.getenv("DEVCONTROL_MQTT_CA", "certs/demo-ca.crt")
+                os.getenv("DEVCONTROL_MQTT_CA", "certs/mqtt-ca.crt")
             ),
             mqtt_client_cert=_optional_path(
                 os.getenv("DEVCONTROL_MQTT_CLIENT_CERT")

@@ -22,7 +22,6 @@ import {
   SceneExecutionDetail
 } from './DeviceModel';
 import { GatewayTransport, GatewayTransportListener } from '../service/GatewayTransport';
-import { DemoCertificateStore } from '../service/DemoCertificateStore';
 import { DeviceSnapshotStore } from '../service/DeviceSnapshotStore';
 import { GatewaySessionStore } from '../service/GatewaySessionStore';
 import { PairingPreferenceStore } from '../service/PairingPreferenceStore';
@@ -68,6 +67,7 @@ export class DeviceManager implements GatewayTransportListener {
   private pendingByMessage: Map<string, string> = new Map<string, string>();
   private actionByMessage: Map<string, string> = new Map<string, string>();
   private timeoutByMessage: Map<string, number> = new Map<string, number>();
+  private trustedCaReady: boolean = false;
 
   constructor(transport: GatewayTransport = new WssGatewayTransport()) {
     this.transport = transport;
@@ -78,6 +78,17 @@ export class DeviceManager implements GatewayTransportListener {
       return;
     }
     this.initialized = true;
+    try {
+      if (this.transport instanceof WssGatewayTransport) {
+        await this.transport.configureProjectCa(context);
+      }
+      this.trustedCaReady = true;
+    } catch (error) {
+      this.setError('TLS_CONFIGURATION_FAILED', '内置项目 CA 初始化失败，请重新安装应用后重试');
+      this.connectionState = ConnectionState.DISCONNECTED;
+      this.pairingRequired = true;
+      return;
+    }
     this.sessionStore = new GatewaySessionStore(context);
     this.snapshotStore = new DeviceSnapshotStore(context);
     this.pairingPreferenceStore = new PairingPreferenceStore(context);
@@ -90,8 +101,6 @@ export class DeviceManager implements GatewayTransportListener {
     } catch (preferenceError) {
     }
     try {
-      const caPath = await DemoCertificateStore.prepare(context);
-      this.transport.setCertificateAuthorityPath(caPath);
       const cached = await this.snapshotStore.restore();
       if (cached !== null) {
         this.devices = cached.devices;
@@ -123,6 +132,10 @@ export class DeviceManager implements GatewayTransportListener {
   }
 
   async pairGateway(address: string, pairingCode: string): Promise<boolean> {
+    if (!this.trustedCaReady) {
+      this.setError('TLS_CONFIGURATION_FAILED', '内置项目 CA 尚未准备完成，请稍后重试');
+      return false;
+    }
     const normalized = address.trim().replace(/\/+$/, '');
     if (normalized.indexOf('https://') !== 0) {
       this.setError('INVALID_COMMAND', '网关地址必须以 https:// 开头');

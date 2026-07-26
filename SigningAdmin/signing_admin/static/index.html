@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DevControl 签发管理台</title>
+  <style>
+    body { max-width: 920px; margin: 28px auto; padding: 0 18px; color: #182635; background: #f6f8fb; font: 15px/1.5 "Microsoft YaHei", sans-serif; }
+    section { margin: 18px 0; padding: 20px; border: 1px solid #d8e0e8; border-radius: 12px; background: #fff; }
+    label { display: block; margin-top: 10px; font-weight: 600; } input { box-sizing: border-box; width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #b8c7d6; border-radius: 6px; }
+    label.confirm-overwrite { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    label.confirm-overwrite input { width: 18px; height: 18px; margin: 0; padding: 0; flex: none; }
+    button { margin-top: 16px; padding: 9px 14px; color: #fff; border: 0; border-radius: 6px; background: #1769c2; cursor: pointer; } pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .warning { color: #875500; } .result { min-height: 1.4em; }
+  </style>
+</head>
+<body>
+  <h1>DevControl 签发管理台</h1>
+  <p class="warning">仅绑定本机回环地址。CA 私钥与口令不会写入项目、浏览器存储或下载链接。</p>
+  <section>
+    <h2>1. 初始化项目 CA</h2>
+    <p>签发目录必须位于仓库外。正式版已有网关时，先将新 CA 写入临时路径，再使用“过渡根”合并旧、新 CA。</p>
+    <form data-endpoint="/api/v1/project-ca">
+      <label>签发目录（仓库外）<input name="issuerRoot" required placeholder="D:\DevControlIssuer"></label>
+      <label>App CA 公钥路径<input name="appCaPath" required value="DevControl\entry\src\main\resources\rawfile\demo_ca.crt"></label>
+      <label>CA 名称<input name="commonName" value="DevControl Project Gateway CA"></label>
+      <label>有效期（天）<input name="validDays" type="number" min="365" max="7300" value="3650"></label>
+      <label>CA 私钥口令<input name="caKeyPassword" type="password" required></label>
+      <label class="confirm-overwrite"><input name="overwrite" type="checkbox">确认覆盖已有文件</label>
+      <button>创建并部署</button>
+    </form>
+  </section>
+  <section>
+    <h2>2. 签发网关证书</h2>
+    <p>先人工核对 CSR 中的 DNS/IP SAN 归属。只把生成的 <code>gateway.crt</code> 交给网关用户。</p>
+    <form data-endpoint="/api/v1/gateway-certificates">
+      <label>CSR 路径<input name="csrPath" required></label>
+      <label>项目 CA 公钥<input name="caCertificatePath" required></label>
+      <label>项目 CA 私钥<input name="caPrivateKeyPath" required></label>
+      <label>CA 私钥口令<input name="caKeyPassword" type="password" required></label>
+      <label>输出证书路径<input name="outputPath" required></label>
+      <label>有效期（天）<input name="validDays" type="number" min="1" max="397" value="90"></label>
+      <label class="confirm-overwrite"><input name="overwrite" type="checkbox">确认覆盖已有文件</label>
+      <button>签发 gateway.crt</button>
+    </form>
+  </section>
+  <section>
+    <h2>3. 根 CA 过渡与检查</h2>
+    <form data-endpoint="/api/v1/root-ca/transition">
+      <label>当前 App 信任包 / 旧根<input name="existingTrustPath" required></label>
+      <label>新项目 CA<input name="newCaPath" required></label>
+      <label>App CA 公钥路径<input name="appCaPath" required value="DevControl\entry\src\main\resources\rawfile\demo_ca.crt"></label>
+      <label class="confirm-overwrite"><input name="overwrite" type="checkbox">确认覆盖已有文件</label>
+      <button>发布过渡信任包</button>
+    </form>
+    <form data-endpoint="/api/v1/root-ca/finalize">
+      <label>新项目 CA<input name="newCaPath" required></label>
+      <label>App CA 公钥路径<input name="appCaPath" required value="DevControl\entry\src\main\resources\rawfile\demo_ca.crt"></label>
+      <label class="confirm-overwrite"><input name="overwrite" type="checkbox">确认覆盖已有文件</label>
+      <button>完成轮换</button>
+    </form>
+  </section>
+  <pre class="result" id="result"></pre>
+  <script>
+    const result = document.querySelector('#result');
+    document.querySelectorAll('form').forEach((form) => form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      form.querySelectorAll('input[type=checkbox]').forEach((box) => data[box.name] = box.checked);
+      for (const key of ['validDays']) if (key in data) data[key] = Number(data[key]);
+      const response = await fetch(form.dataset.endpoint, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+      const body = await response.json();
+      result.textContent = JSON.stringify(body, null, 2);
+      if (body.downloadUrl) {
+        const link = document.createElement('a');
+        link.href = body.downloadUrl;
+        link.textContent = '下载 gateway.crt';
+        result.append(document.createTextNode('\n\n'));
+        result.append(link);
+      }
+    }));
+  </script>
+</body>
+</html>
