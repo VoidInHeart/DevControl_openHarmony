@@ -1308,7 +1308,7 @@ _ADMIN_DASHBOARD_HTML_V2 = """
   <dialog id="gateway-offline-dialog" aria-labelledby="gateway-offline-title">
     <article class="offline-dialog">
       <h2 id="gateway-offline-title">网关已下线</h2>
-      <p>无法连接本机维护接口。页面已切换为未连接状态；请确认网关终端仍在运行，恢复后本页面会自动重新连接。</p>
+      <p>无法连接本机维护接口。页面已切换为未连接状态；请确认网关终端仍在运行。网关重启时默认会轮换 Admin Token，恢复后请填入终端显示的新令牌再连接。</p>
       <footer><button class="secondary" id="close-gateway-offline-dialog" type="button">知道了</button></footer>
     </article>
   </dialog>
