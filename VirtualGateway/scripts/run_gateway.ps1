@@ -26,7 +26,7 @@ $env:DEVCONTROL_TLS_KEY = (Join-Path $GatewayRoot "certs\gateway.key")
 $env:DEVCONTROL_DATABASE = (Join-Path $GatewayRoot "data\devcontrol.db")
 if (-not (Test-Path -LiteralPath $env:DEVCONTROL_TLS_CERT) -or
     -not (Test-Path -LiteralPath $env:DEVCONTROL_TLS_KEY)) {
-  throw "TLS certificate is missing. Run scripts\generate_demo_certs.ps1 first."
+  throw "TLS certificate is missing. Generate a CSR and install the project-CA-signed gateway.crt/key first; see ..\SigningAdmin\README.md."
 }
 if ($InitialPairingCode.Length -gt 0) {
   $env:DEVCONTROL_INITIAL_PAIRING_CODE = $InitialPairingCode

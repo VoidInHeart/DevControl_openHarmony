@@ -1,5 +1,7 @@
 # VirtualGateway
 
+网关 TLS 证书使用项目 CA 的 CSR 签发流程；请参阅 [证书签发说明](CERTIFICATE_ISSUANCE.md) 和 [SigningAdmin](../SigningAdmin/README.md)。旧的演示 CA 生成脚本已废弃。
+
 DevControl 的独立虚拟家庭网关。该工程使用 Python 3.11～3.13、FastAPI、HTTPS/WSS 和 SQLite，负责模拟设备、权威状态、配对鉴权、加密命令、审计与故障注入。
 
 ## 目录
@@ -8,7 +10,7 @@ DevControl 的独立虚拟家庭网关。该工程使用 Python 3.11～3.13、Fa
 - `protocol/`：APP 与网关共用的协议 1.0 JSON Schema。
 - `tests/`：单元测试与协议契约测试。
 - `scripts/`：证书、启动、端到端、性能和稳定性脚本。
-- `certs/`：演示 CA 与网关证书；私钥不会被 Git 跟踪。
+- `certs/`：网关私钥、CSR 与项目 CA 签发的证书；均不会被 Git 跟踪。
 - `data/`：本地 SQLite 运行数据，不会被 Git 跟踪。
 - `reports/`：性能与稳定性报告，不会被 Git 跟踪。
 
@@ -18,11 +20,10 @@ DevControl 的独立虚拟家庭网关。该工程使用 Python 3.11～3.13、Fa
 
 ```powershell
 python -m pip install -r requirements.txt
-.\scripts\generate_demo_certs.ps1 -HostName localhost -IpAddress 127.0.0.1
 .\scripts\test_gateway.ps1
 ```
 
-证书脚本会把公开演示 CA 同步到相邻 APP 工程的 `../DevControl/entry/src/main/resources/rawfile/demo_ca.crt`。更换网关证书后需要重新构建 APP。
+启动前请依照 [证书签发说明](CERTIFICATE_ISSUANCE.md) 生成网关 CSR、取得项目 CA 签发的 `gateway.crt`，并将其与本机私钥置于 `certs/`。项目 CA 变更或根轮换后才需要重新构建 App。
 
 ## 启动
 
@@ -34,7 +35,7 @@ python -m pip install -r requirements.txt
 
 启动日志会显示随机六位一次性配对码。配对成功或五分钟到期后，该码立即轮换；如确需可重复的首个调试码，可显式传入 `-InitialPairingCode`，不要把固定码写入仓库。客户端凭据默认有效 24 小时，可用 `-CredentialTtlSeconds` 调整；到期后 HTTP 和已建立的 WSS 都会返回认证失败，APP 需要重新配对。
 
-演示证书和调试配对机制仅用于本地开发，不适用于生产环境。
+调试配对机制仅用于本地开发；网关 TLS 证书始终必须由 App 信任的项目 CA 签发。
 
 ## 二维码注册与移除
 

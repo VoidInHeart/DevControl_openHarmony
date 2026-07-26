@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import ssl
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +21,8 @@ from devcontrol_gateway.security import encrypt_payload, now_ms
 from devcontrol_gateway.service import GatewayService
 
 
-CERTS = Path(__file__).resolve().parents[1] / "certs"
+GATEWAY_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+SIGNING_ADMIN_ROOT = Path(__file__).resolve().parents[2] / "SigningAdmin"
 
 
 class FakeMqttClient:
@@ -62,27 +66,65 @@ class FakeMqttClient:
         self.published.append((topic, payload, qos, retain))
 
 
-def mqtt_config() -> GatewayConfig:
+@pytest.fixture
+def tls_material(tmp_path: Path) -> tuple[Path, Path, Path]:
+    issuer_dir = tmp_path / "issuer"
+    gateway_dir = tmp_path / "gateway"
+    ca_cert = issuer_dir / "test-ca.crt"
+    ca_key = issuer_dir / "test-ca.key"
+    gateway_key = gateway_dir / "gateway.key"
+    gateway_csr = gateway_dir / "gateway.csr"
+    gateway_cert = gateway_dir / "gateway.crt"
+    environment = {**os.environ, "TEST_TRANSPORT_CA_PASSWORD": "transport-test-password"}
+
+    def run(script: str, *arguments: str) -> None:
+        issuer_commands = {"create_project_ca.py": "create", "sign_gateway_csr.py": "sign"}
+        command = (
+            [sys.executable, "-m", "signing_admin.cli", issuer_commands[script], *arguments]
+            if script in issuer_commands
+            else [sys.executable, str(GATEWAY_SCRIPTS / script), *arguments]
+        )
+        subprocess.run(
+            command, check=True, capture_output=True, text=True, env=environment,
+            cwd=SIGNING_ADMIN_ROOT if script in issuer_commands else GATEWAY_SCRIPTS.parent,
+        )
+
+    run("create_project_ca.py", "--cert", str(ca_cert), "--key", str(ca_key),
+        "--key-password-env", "TEST_TRANSPORT_CA_PASSWORD")
+    run("generate_gateway_csr.py", "--ip", "127.0.0.1", "--key", str(gateway_key),
+        "--csr", str(gateway_csr))
+    run("sign_gateway_csr.py", "--csr", str(gateway_csr), "--ca-cert", str(ca_cert),
+        "--ca-key", str(ca_key), "--ca-key-password-env", "TEST_TRANSPORT_CA_PASSWORD",
+        "--output", str(gateway_cert))
+    return ca_cert, gateway_cert, gateway_key
+
+
+def mqtt_config(tls_material: tuple[Path, Path, Path]) -> GatewayConfig:
+    ca_cert, gateway_cert, gateway_key = tls_material
     return GatewayConfig(
         mqtt_enabled=True,
         mqtt_host="broker.example.test",
-        mqtt_ca=CERTS / "demo-ca.crt",
-        mqtt_client_cert=CERTS / "gateway.crt",
-        mqtt_client_key=CERTS / "gateway.key",
+        mqtt_ca=ca_cert,
+        mqtt_client_cert=gateway_cert,
+        mqtt_client_key=gateway_key,
         mqtt_topic_prefix="devcontrol/v1",
         enable_background_tasks=False,
     )
 
 
-def test_mqtt_configuration_requires_tls_client_authentication() -> None:
-    config = mqtt_config()
+def test_mqtt_configuration_requires_tls_client_authentication(
+    tls_material: tuple[Path, Path, Path],
+) -> None:
+    config = mqtt_config(tls_material)
     config.mqtt_client_cert = None
     config.mqtt_client_key = None
     with pytest.raises(ValueError, match="mTLS"):
         config.validate()
 
 
-def test_mqtt5_tls_bridge_reuses_secure_command_pipeline(tmp_path: Path) -> None:
+def test_mqtt5_tls_bridge_reuses_secure_command_pipeline(
+    tmp_path: Path, tls_material: tuple[Path, Path, Path]
+) -> None:
     gateway = GatewayService(
         GatewayConfig(
             database=tmp_path / "mqtt.db",
@@ -115,7 +157,7 @@ def test_mqtt5_tls_bridge_reuses_secure_command_pipeline(tmp_path: Path) -> None
         separators=(",", ":"),
     ).encode()
     fake = FakeMqttClient()
-    bridge = MqttBridge(mqtt_config(), gateway, client=fake)
+    bridge = MqttBridge(mqtt_config(tls_material), gateway, client=fake)
 
     async def exercise() -> None:
         await bridge.start()
@@ -155,10 +197,13 @@ def test_mqtt5_tls_bridge_reuses_secure_command_pipeline(tmp_path: Path) -> None
     )
 
 
-def test_https_server_context_rejects_legacy_tls() -> None:
+def test_https_server_context_rejects_legacy_tls(
+    tls_material: tuple[Path, Path, Path],
+) -> None:
+    _, gateway_cert, gateway_key = tls_material
     config = GatewayConfig(
-        tls_cert=CERTS / "gateway.crt",
-        tls_key=CERTS / "gateway.key",
+        tls_cert=gateway_cert,
+        tls_key=gateway_key,
     )
     server_config = _business_server_config(FastAPI(), config)
     assert server_config.ssl is not None

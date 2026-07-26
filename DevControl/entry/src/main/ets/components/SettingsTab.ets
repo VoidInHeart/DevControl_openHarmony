@@ -386,7 +386,7 @@ export struct SettingsTab {
   @Builder
   ProtectionDetail() {
     this.DetailCard('传输安全', 'HTTPS / WSS', 'App 与网关之间使用加密连接。')
-    this.DetailCard('证书信任', '鸿途智联 Demo CA', '演示环境内置 CA，并进行证书校验。')
+    this.DetailCard('证书信任', '内置项目 CA', '仅接受由项目 CA 签发且名称匹配的网关证书。')
     this.DetailCard('命令保护', 'AES-256-GCM', '控制命令带有时间戳、nonce 和消息编号，便于防重放和审计。')
     this.ErrorCodeSection()
   }

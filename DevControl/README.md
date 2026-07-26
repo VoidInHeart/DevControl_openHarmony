@@ -1,5 +1,7 @@
 # DevControl V1.2
 
+网关 TLS 证书采用项目 CA 与 CSR 签发流程。App 仅内置项目 CA 公钥，网关私钥和 CA 私钥均不得进入仓库；操作说明见 [`../VirtualGateway/CERTIFICATE_ISSUANCE.md`](../VirtualGateway/CERTIFICATE_ISSUANCE.md)。
+
 DevControl 是 HarmonyOS 家庭控制端工程，使用 ArkTS + Native C++ 架构。正式运行链路以相邻的独立虚拟网关为唯一设备状态权威，APP 不包含本地设备成功模拟路径。当前界面包含“家、智能、设置”导航、多房间设备快照、规则/常用场景持久化、空调四档风速，以及由能力描述驱动的窗帘。
 
 ## 目录
@@ -26,7 +28,7 @@ cd ..\VirtualGateway
 
 启动日志会显示当前随机六位一次性配对码；也可使用仅绑定本机的维护接口查询。配对成功或五分钟到期后，该码会立即轮换。客户端凭据默认有效 24 小时，可通过网关启动参数调整。
 
-APP 配对地址默认使用 `https://<网关主机>:8443`。证书 SAN 必须包含该主机名或 IP；生成证书后必须重新构建 APP，使公开演示 CA 打包进入 HAP。
+APP 配对地址默认使用 `https://<网关主机>:8443`。证书 SAN 必须包含该主机名或 IP；仅当项目 CA 变更或轮换时才需重新构建 APP，以打包新的项目 CA 公钥。
 
 ## 本地签名
 

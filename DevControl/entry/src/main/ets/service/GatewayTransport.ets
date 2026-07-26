@@ -18,7 +18,6 @@ export interface GatewayTransportListener {
 }
 
 export interface GatewayTransport {
-  setCertificateAuthorityPath(path: string): void;
   configure(session: GatewaySession): void;
   checkHealth(address: string): Promise<boolean>;
   pair(address: string, pairingCode: string, clientId: string): Promise<GatewaySession>;

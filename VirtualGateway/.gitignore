@@ -4,6 +4,8 @@ __pycache__/
 *.pyc
 data/
 certs/*.key
+certs/*.csr
+certs/*.crt
 certs/*.p12
 certs/*.pfx
 reports/*.json

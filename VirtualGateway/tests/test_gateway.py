@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from devcontrol_gateway.app import create_app
+from devcontrol_gateway.app import create_admin_app, create_app
 from devcontrol_gateway.config import GatewayConfig
 from devcontrol_gateway.errors import AUTH_FAILED, RATE_LIMITED
 from devcontrol_gateway.models import PROTOCOL_VERSION, SecureCommandEnvelope
@@ -83,6 +83,16 @@ def test_pairing_and_authentication(service: GatewayService) -> None:
     with pytest.raises(Exception) as invalid:
         service.sessions.authenticate("not-a-real-token")
     assert getattr(invalid.value, "code", None) == AUTH_FAILED
+
+
+def test_admin_dashboard_exposes_gateway_offline_recovery_ui(service: GatewayService) -> None:
+    client = TestClient(create_admin_app(service, "test-admin-token"))
+    response = client.get("/")
+    assert response.status_code == 200
+    assert 'id="connection-state"' in response.text
+    assert 'id="gateway-offline-dialog"' in response.text
+    assert "fetchWithTimeout" in response.text
+    assert "网关已下线" in response.text
 
 
 def test_pairing_rate_limit() -> None:

@@ -1,4 +1,6 @@
+import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { fileIo } from '@kit.CoreFileKit';
 import { http, webSocket } from '@kit.NetworkKit';
 import native from 'libentry.so';
 import {
@@ -18,6 +20,9 @@ import {
 } from './DeviceRegistration';
 import { GatewayTransport, GatewayTransportListener } from './GatewayTransport';
 import { describeHttpBusinessError } from './NetworkErrorMessage';
+
+const PROJECT_CA_FILE_NAME = 'devcontrol_project_ca.pem';
+const PROJECT_CA_RAWFILE_NAME = 'demo_ca.crt';
 
 class SealedParts {
   nonce: string = '';
@@ -43,21 +48,41 @@ class CommandEnvelope extends CommandHeader {
 
 export class WssGatewayTransport implements GatewayTransport {
   private session: GatewaySession | null = null;
-  private caPath: string = '';
   private socket: webSocket.WebSocket | null = null;
   private listener: GatewayTransportListener | null = null;
   private closedByUser: boolean = false;
   private disconnectionReported: boolean = false;
   private heartbeatTimer: number = -1;
   private lastMessageAt: number = 0;
+  private projectCaPath: string = '';
+
+  async configureProjectCa(context: common.UIAbilityContext): Promise<void> {
+    const certificate = await context.resourceManager.getRawFileContent(PROJECT_CA_RAWFILE_NAME);
+    if (certificate.byteLength === 0) {
+      throw new Error('TLS_CONFIGURATION_FAILED:内置项目 CA 内容为空');
+    }
+    const targetPath = context.filesDir + '/' + PROJECT_CA_FILE_NAME;
+    const file = fileIo.openSync(
+      targetPath,
+      fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC
+    );
+    try {
+      const written = fileIo.writeSync(file.fd, certificate.buffer as ArrayBuffer, {
+        offset: certificate.byteOffset,
+        length: certificate.byteLength
+      });
+      if (written !== certificate.byteLength) {
+        throw new Error('TLS_CONFIGURATION_FAILED:无法完整写入内置项目 CA');
+      }
+      this.projectCaPath = targetPath;
+    } finally {
+      fileIo.closeSync(file);
+    }
+  }
 
   configure(session: GatewaySession): void {
     this.requireSecureAddress(session.gatewayAddress);
     this.session = session;
-  }
-
-  setCertificateAuthorityPath(path: string): void {
-    this.caPath = path;
   }
 
   async checkHealth(address: string): Promise<boolean> {
@@ -294,11 +319,9 @@ export class WssGatewayTransport implements GatewayTransport {
       header: {
         'Authorization': 'Bearer ' + session.credential
       },
+      caPath: this.requireProjectCaPath(),
       skipServerCertVerification: false
     };
-    if (this.caPath.length > 0) {
-      options.caPath = this.caPath;
-    }
     try {
       await socket.connect(wsAddress, options);
       this.lastMessageAt = Date.now();
@@ -402,7 +425,8 @@ export class WssGatewayTransport implements GatewayTransport {
         header: headers,
         expectDataType: http.HttpDataType.STRING,
         connectTimeout: 5000,
-        readTimeout: 5000
+        readTimeout: 5000,
+        caPath: this.requireProjectCaPath()
       };
       // OpenHarmony NetStack rejects a DELETE that carries an empty
       // `extraData` value with its local BusinessError 401 (Parameter error).
@@ -410,9 +434,6 @@ export class WssGatewayTransport implements GatewayTransport {
       // JSON body; the gateway's DELETE endpoint intentionally has no body.
       if (body !== null) {
         options.extraData = JSON.stringify(body);
-      }
-      if (this.caPath.length > 0) {
-        options.caPath = this.caPath;
       }
       let response: http.HttpResponse;
       try {
@@ -459,6 +480,13 @@ export class WssGatewayTransport implements GatewayTransport {
     if (!address.startsWith('https://') || address.length <= 'https://'.length) {
       throw new Error('INVALID_COMMAND:网关地址必须使用 HTTPS');
     }
+  }
+
+  private requireProjectCaPath(): string {
+    if (this.projectCaPath.length === 0) {
+      throw new Error('TLS_CONFIGURATION_FAILED:内置项目 CA 尚未准备完成');
+    }
+    return this.projectCaPath;
   }
 
   private stopHeartbeatMonitor(): void {

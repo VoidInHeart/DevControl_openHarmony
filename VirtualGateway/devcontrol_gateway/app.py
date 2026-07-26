@@ -879,7 +879,19 @@ _ADMIN_DASHBOARD_HTML = """
     header { padding: 22px 26px; background: #197fc7; color: white; display: flex; gap: 16px; align-items: flex-end; }
     h1 { margin: 0; font-size: 26px; }
     .sub { margin-top: 6px; color: #d7efff; font-size: 14px; }
-    .token { margin-left: auto; display: flex; gap: 8px; }
+    .token { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .connection-state {
+      padding: 5px 9px;
+      border: 1px solid #d9e2ec;
+      border-radius: 999px;
+      background: #f8fafc;
+      color: #65758b;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .connection-state.connected { border-color: #a7e3ca; background: #f2fbf7; color: #087a57; }
+    .connection-state.disconnected { border-color: #f0c2c2; background: #fff6f6; color: #b42318; }
     input { height: 36px; min-width: 280px; border: 0; border-radius: 8px; padding: 0 10px; }
     button { height: 36px; border: 0; border-radius: 8px; padding: 0 14px; background: #0f5fa8; color: white; font-weight: 700; cursor: pointer; }
     button.secondary { background: #e0f2fe; color: #075985; }
@@ -1070,6 +1082,7 @@ _ADMIN_DASHBOARD_HTML_V2 = """
       font-weight: 700;
       cursor: pointer;
     }
+    button:disabled { cursor: not-allowed; opacity: .55; }
     button.secondary {
       background: #eef5ff;
       color: #155aa5;
@@ -1200,6 +1213,19 @@ _ADMIN_DASHBOARD_HTML_V2 = """
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     td, th { padding: 9px 8px; border-bottom: 1px solid #d9e2ec; text-align: left; }
     #status { min-height: 20px; margin-top: 10px; color: #65758b; font-size: 13px; }
+    dialog {
+      width: min(420px, calc(100% - 32px));
+      padding: 0;
+      border: 0;
+      border-radius: 12px;
+      box-shadow: 0 22px 80px rgba(13, 28, 46, .3);
+      color: #172638;
+    }
+    dialog::backdrop { background: rgba(13, 28, 46, .5); }
+    .offline-dialog { padding: 22px; }
+    .offline-dialog h2 { color: #b42318; }
+    .offline-dialog p { margin: 0 0 18px; color: #526477; line-height: 1.65; }
+    .offline-dialog footer { display: flex; justify-content: flex-end; }
     @media (max-width: 1100px) { .overview { grid-template-columns: 1fr; } }
     @media (max-width: 980px) {
       header { display: block; }
@@ -1222,6 +1248,7 @@ _ADMIN_DASHBOARD_HTML_V2 = """
       <div class="sub">用于演示虚拟网关、设备状态、安全记录和测试场景。</div>
     </div>
     <div class="token">
+      <span id="connection-state" class="connection-state disconnected" role="status">未连接</span>
       <input id="token" type="password" placeholder="输入启动日志里的 Admin Token">
       <button id="connect">连接</button>
     </div>
@@ -1262,12 +1289,12 @@ _ADMIN_DASHBOARD_HTML_V2 = """
         <h2>测试场景与结果</h2>
         <div class="action-note">这些按钮只用于演示。点击后优先看左侧设备状态、下方告警和 App 里的变化；审计记录主要记录 App 发出的控制命令。</div>
         <div class="actions">
-          <button class="secondary" data-action="lightOffline">灯光离线</button>
-          <button class="secondary" data-action="lightOnline">灯光恢复</button>
-          <button class="secondary" data-action="doorFault">门锁低电量/卡滞</button>
-          <button class="secondary" data-action="doorRecover">门锁恢复</button>
-          <button class="secondary" data-action="envHot">闷热环境</button>
-          <button class="secondary" data-action="envNormal">恢复环境</button>
+          <button class="secondary" data-action="lightOffline" disabled>灯光离线</button>
+          <button class="secondary" data-action="lightOnline" disabled>灯光恢复</button>
+          <button class="secondary" data-action="doorFault" disabled>门锁低电量/卡滞</button>
+          <button class="secondary" data-action="doorRecover" disabled>门锁恢复</button>
+          <button class="secondary" data-action="envHot" disabled>闷热环境</button>
+          <button class="secondary" data-action="envNormal" disabled>恢复环境</button>
         </div>
         <div id="status"></div>
         <h2 style="margin-top:16px">最近告警</h2>
@@ -1278,25 +1305,98 @@ _ADMIN_DASHBOARD_HTML_V2 = """
       </section>
     </div>
   </main>
+  <dialog id="gateway-offline-dialog" aria-labelledby="gateway-offline-title">
+    <article class="offline-dialog">
+      <h2 id="gateway-offline-title">网关已下线</h2>
+      <p>无法连接本机维护接口。页面已切换为未连接状态；请确认网关终端仍在运行，恢复后本页面会自动重新连接。</p>
+      <footer><button class="secondary" id="close-gateway-offline-dialog" type="button">知道了</button></footer>
+    </article>
+  </dialog>
   <script>
     const tokenInput = document.querySelector("#token");
     const statusEl = document.querySelector("#status");
+    const connectButton = document.querySelector("#connect");
+    const connectionStateEl = document.querySelector("#connection-state");
+    const offlineDialog = document.querySelector("#gateway-offline-dialog");
+    const actionButtons = Array.from(document.querySelectorAll("[data-action]"));
+    let gatewayConnected = false;
+    let outageNotified = false;
+    let refreshInFlight = false;
     tokenInput.value = localStorage.getItem("devcontrolAdminToken") || "";
-    document.querySelector("#connect").addEventListener("click", () => {
+    connectButton.addEventListener("click", () => {
       localStorage.setItem("devcontrolAdminToken", tokenInput.value.trim());
       refresh();
     });
-    document.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", () => runAction(button.dataset.action)));
+    document.querySelector("#close-gateway-offline-dialog").addEventListener("click", () => offlineDialog.close());
+    offlineDialog.addEventListener("click", (event) => { if (event.target === offlineDialog) offlineDialog.close(); });
+    actionButtons.forEach((button) => button.addEventListener("click", () => runAction(button.dataset.action)));
     function headers() { return { "X-Admin-Token": tokenInput.value.trim(), "Content-Type": "application/json" }; }
-    async function refresh() {
-      if (!tokenInput.value.trim()) { statusEl.textContent = "请输入 Admin Token 后连接。"; return; }
+    function setConnectionState(connected, notifyOffline = false) {
+      const changed = gatewayConnected !== connected;
+      gatewayConnected = connected;
+      connectionStateEl.textContent = connected ? "已连接" : "未连接";
+      connectionStateEl.className = "connection-state " + (connected ? "connected" : "disconnected");
+      connectButton.textContent = connected ? "刷新" : "连接";
+      actionButtons.forEach((button) => button.disabled = !connected);
+      if (connected) {
+        outageNotified = false;
+        return changed;
+      }
+      clearDashboard();
+      if (notifyOffline && !outageNotified) {
+        outageNotified = true;
+        if (!offlineDialog.open) offlineDialog.showModal();
+      }
+      return changed;
+    }
+    function clearDashboard() {
+      document.querySelector("#pairing").textContent = "--";
+      document.querySelector("#expires").textContent = "--";
+      document.querySelector("#online").textContent = "--";
+      document.querySelector("#alerts").textContent = "--";
+      document.querySelector("#map").innerHTML = '<article class="node gateway"><div class="node-title">网关未连接</div><div class="node-state">等待维护接口恢复</div></article>';
+      document.querySelector("#devices").innerHTML = '<article class="device"><div class="name">网关已下线</div><div class="state">恢复网关后将自动重新同步设备状态。</div></article>';
+      document.querySelector("#logs").innerHTML = emptyRow(4);
+      document.querySelector("#alertRows").innerHTML = emptyRow(3);
+      document.querySelector("#briefing").innerHTML = '<article class="risk"><strong>网关未连接</strong><div class="state">当前展示的设备快照已清除，避免把旧状态误认为实时状态。</div></article>';
+      document.querySelector("#security").innerHTML = "";
+    }
+    async function fetchWithTimeout(url, options = {}, timeoutMs = 4000) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await fetch("/admin/v1/dashboard", { headers: headers() });
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    function isTransportFailure(error) {
+      return error && (error.name === "AbortError" || error instanceof TypeError);
+    }
+    async function refresh() {
+      if (refreshInFlight) return;
+      if (!tokenInput.value.trim()) {
+        setConnectionState(false);
+        statusEl.textContent = "请输入 Admin Token 后连接。";
+        return;
+      }
+      refreshInFlight = true;
+      try {
+        const response = await fetchWithTimeout("/admin/v1/dashboard", { headers: headers() });
         if (!response.ok) throw new Error("Admin Token 无效，或网关尚未准备好。");
         render(await response.json());
-        statusEl.textContent = "已同步 " + new Date().toLocaleTimeString();
+        const recovered = setConnectionState(true);
+        statusEl.textContent = (recovered ? "网关已重新连接，" : "已同步 ") + new Date().toLocaleTimeString();
       } catch (error) {
-        statusEl.textContent = error.message || String(error);
+        if (isTransportFailure(error)) {
+          setConnectionState(false, gatewayConnected);
+          statusEl.textContent = "网关已下线，正在等待恢复。";
+        } else {
+          setConnectionState(false);
+          statusEl.textContent = error.message || String(error);
+        }
+      } finally {
+        refreshInFlight = false;
       }
     }
     function render(data) {
@@ -1375,11 +1475,16 @@ _ADMIN_DASHBOARD_HTML_V2 = """
       };
       const [url, body] = map[action];
       try {
-        const response = await fetch(url, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+        const response = await fetchWithTimeout(url, { method: "POST", headers: headers(), body: JSON.stringify(body) });
         if (!response.ok) throw new Error("测试场景执行失败。");
         await refresh();
       } catch (error) {
-        statusEl.textContent = error.message || String(error);
+        if (isTransportFailure(error)) {
+          setConnectionState(false, gatewayConnected);
+          statusEl.textContent = "网关已下线，正在等待恢复。";
+        } else {
+          statusEl.textContent = error.message || String(error);
+        }
       }
     }
     setInterval(refresh, 3000);

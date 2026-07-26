@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DevControl 签发管理员端</title>
+  <style>
+    :root { color-scheme: light; --ink: #172638; --muted: #64748b; --line: #d9e2ec; --bg: #f3f7fb; --blue: #1769c2; --blue-soft: #edf5ff; --good: #087a57; --danger: #bf3030; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif; line-height: 1.5; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px max(24px, calc((100vw - 1180px) / 2)); background: #fff; border-bottom: 1px solid var(--line); }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 4px; font-size: 25px; }
+    h2 { margin-bottom: 6px; font-size: 18px; }
+    h3 { margin-bottom: 8px; font-size: 15px; }
+    .sub, .hint, .muted { color: var(--muted); font-size: 13px; }
+    main { width: min(1180px, calc(100% - 40px)); margin: 22px auto 40px; }
+    .notice { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px; padding: 14px 16px; border: 1px solid #f1d49c; border-radius: 10px; background: #fffaf0; color: #764a06; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+    .wide { grid-column: 1 / -1; }
+    section { padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 8px 24px rgba(21, 37, 54, .04); }
+    .section-top { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    .step { display: inline-grid; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: var(--blue); color: #fff; font-size: 13px; font-weight: 700; }
+    .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .field { display: grid; gap: 6px; }
+    .field.full { grid-column: 1 / -1; }
+    label { font-size: 13px; font-weight: 700; }
+    input { width: 100%; height: 38px; padding: 0 10px; border: 1px solid #cbd8e6; border-radius: 8px; background: #fbfdff; color: var(--ink); font: inherit; font-size: 14px; }
+    input::placeholder { color: #94a3b8; opacity: 1; }
+    input:focus { outline: 3px solid #cfe5ff; border-color: #5a9ce5; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+    .actions .confirm-overwrite { display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; font-weight: 400; }
+    .actions .confirm-overwrite input { flex: none; width: 18px; height: 18px; margin: 0; padding: 0; }
+    button, .download { min-height: 38px; padding: 0 14px; border: 1px solid transparent; border-radius: 8px; background: var(--blue); color: #fff; font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; }
+    button:hover, .download:hover { background: #105ba8; }
+    button.secondary { border-color: #cfe0f5; background: var(--blue-soft); color: #155aa5; }
+    button.secondary:hover { background: #dcecff; }
+    button.danger { background: #b52e2e; }
+    button.danger:hover { background: #982323; }
+    button:disabled { cursor: wait; opacity: .7; }
+    .result { display: none; margin-top: 16px; padding: 12px; border: 1px solid #cfe0f5; border-radius: 8px; background: #f6faff; }
+    .result.show { display: block; }
+    .result.error { border-color: #f0c2c2; background: #fff6f6; color: #942626; }
+    pre { overflow: auto; margin: 0; color: inherit; font: 12px/1.5 Consolas, "Cascadia Code", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .download-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; color: var(--good); font-size: 14px; font-weight: 700; }
+    .rotation { background: linear-gradient(145deg, #fff 70%, #f7fbff); }
+    .phase { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+    dialog { width: min(680px, calc(100% - 32px)); max-height: min(760px, calc(100% - 32px)); padding: 0; border: 0; border-radius: 14px; box-shadow: 0 22px 80px rgba(13, 28, 46, .3); color: var(--ink); }
+    dialog::backdrop { background: rgba(13, 28, 46, .5); }
+    .manual { max-height: inherit; padding: 24px; overflow: auto; }
+    .manual li { margin: 8px 0; }
+    .manual code { padding: 2px 5px; border-radius: 4px; background: #edf2f7; }
+    .manual footer { display: flex; justify-content: flex-end; margin-top: 20px; }
+    @media (max-width: 800px) {
+      header { align-items: flex-start; padding: 18px 20px; }
+      main { width: min(100% - 28px, 600px); margin-top: 14px; }
+      .grid, .fields { grid-template-columns: 1fr; }
+      .wide, .field.full { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>DevControl 签发管理员端</h1>
+      <div class="sub">本机证书签发、项目 CA 部署与根 CA 轮换控制台</div>
+    </div>
+    <button class="secondary" id="open-manual" type="button">使用手册</button>
+  </header>
+  <main>
+    <div class="notice"><strong>安全边界</strong><span>此服务只能绑定本机回环地址。CA 私钥和密码仅用于本机签发，不会写入页面、本项目或下载链接。请只将 CSR 和 <code>gateway.crt</code> 交付给网关用户。</span></div>
+    <div class="grid">
+      <section>
+        <div class="section-top"><div><h2><span class="step">1</span> 初始化并部署 project-ca</h2><div class="hint">私钥会在仓库外的签发目录创建；仅公钥会复制到 App 信任锚路径。</div></div></div>
+        <form id="initialize-form">
+          <div class="fields">
+            <div class="field full"><label for="issuer-root">签发目录（仓库外）</label><input id="issuer-root" name="issuerRoot" required placeholder="D:\DevControlIssuer"></div>
+            <div class="field full"><label for="app-ca-path">App 公钥部署路径</label><input id="app-ca-path" name="appCaPath" required value="DevControl\entry\src\main\resources\rawfile\demo_ca.crt"></div>
+            <div class="field"><label for="ca-common-name">CA 名称</label><input id="ca-common-name" name="commonName" value="DevControl Project Gateway CA" required></div>
+            <div class="field"><label for="ca-valid-days">有效期（天）</label><input id="ca-valid-days" name="validDays" type="number" min="365" max="7300" value="3650" required></div>
+            <div class="field full"><label for="initialize-password">新 CA 私钥密码</label><input id="initialize-password" name="caKeyPassword" type="password" autocomplete="new-password" required placeholder="仅管理员保存，不会写入浏览器"></div>
+          </div>
+          <div class="actions"><button type="submit">创建并部署公钥</button><label class="confirm-overwrite muted"><input name="overwrite" type="checkbox">确认覆盖已有文件</label></div>
+        </form>
+        <div class="result" id="initialize-result" aria-live="polite"></div>
+      </section>
+
+      <section>
+        <div class="section-top"><div><h2><span class="step">2</span> 签发 gateway.crt</h2><div class="hint">传入已审核的网关 CSR 路径。签发后提供受控下载地址，也会写入你指定的位置。</div></div></div>
+        <form id="sign-form">
+          <div class="fields">
+            <div class="field full"><label for="csr-path">待签发 CSR 路径</label><input id="csr-path" name="csrPath" required placeholder="C:\Incoming\gateway.csr"></div>
+            <div class="field"><label for="sign-ca-cert">project-ca.crt 路径</label><input id="sign-ca-cert" name="caCertificatePath" required placeholder="D:\DevControlIssuer\project-ca.crt"></div>
+            <div class="field"><label for="sign-ca-key">project-ca.key 路径</label><input id="sign-ca-key" name="caPrivateKeyPath" required placeholder="D:\DevControlIssuer\project-ca.key"></div>
+            <div class="field"><label for="sign-password">CA 私钥密码</label><input id="sign-password" name="caKeyPassword" type="password" autocomplete="current-password" required placeholder="输入项目 CA 的保护口令"></div>
+            <div class="field"><label for="certificate-valid-days">证书有效期（天）</label><input id="certificate-valid-days" name="validDays" type="number" min="1" max="397" value="90" required></div>
+            <div class="field full"><label for="output-path">gateway.crt 输出路径</label><input id="output-path" name="outputPath" required placeholder="C:\Outgoing\gateway.crt"></div>
+          </div>
+          <div class="actions"><button type="submit">审核后签发证书</button><label class="confirm-overwrite muted"><input name="overwrite" type="checkbox">确认覆盖已有输出</label></div>
+        </form>
+        <div class="result" id="sign-result" aria-live="polite"></div>
+      </section>
+
+      <section class="wide rotation">
+        <div class="section-top"><div><h2><span class="step">3</span> 根 CA 轮换</h2><div class="hint">先部署同时信任旧根与新根的 PEM bundle，完成 App 更新和网关证书续期后，才移除旧根。</div></div></div>
+        <div class="phase">
+          <h3>阶段一：发布过渡信任包</h3>
+          <form id="transition-form">
+            <div class="fields">
+              <div class="field"><label for="existing-trust-path">当前信任包 / 旧根路径</label><input id="existing-trust-path" name="existingTrustPath" required placeholder="...\demo_ca.crt"></div>
+              <div class="field"><label for="new-ca-path">新 project-ca.crt 路径</label><input id="new-ca-path" name="newCaPath" required placeholder="D:\DevControlIssuer-2027\project-ca.crt"></div>
+              <div class="field full"><label for="transition-app-ca-path">部署目标 App 信任路径</label><input id="transition-app-ca-path" name="appCaPath" required value="DevControl\entry\src\main\resources\rawfile\demo_ca.crt"></div>
+            </div>
+            <div class="actions"><button type="submit">写入旧根 + 新根信任包</button><label class="confirm-overwrite muted"><input name="overwrite" type="checkbox">确认覆盖部署目标</label></div>
+          </form>
+          <div class="result" id="transition-result" aria-live="polite"></div>
+        </div>
+        <div class="phase">
+          <h3>阶段二：完成轮换，撤销旧根</h3>
+          <form id="finalize-form">
+            <div class="fields">
+              <div class="field"><label for="final-new-ca-path">新 project-ca.crt 路径</label><input id="final-new-ca-path" name="newCaPath" required placeholder="D:\DevControlIssuer-2027\project-ca.crt"></div>
+              <div class="field"><label for="final-app-ca-path">部署目标 App 信任路径</label><input id="final-app-ca-path" name="appCaPath" required value="DevControl\entry\src\main\resources\rawfile\demo_ca.crt"></div>
+            </div>
+            <div class="actions"><button class="danger" type="submit">仅保留新根</button><label class="confirm-overwrite muted"><input name="overwrite" type="checkbox">确认所有网关均已切换</label></div>
+          </form>
+          <div class="result" id="finalize-result" aria-live="polite"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="manual-dialog" aria-labelledby="manual-title">
+    <article class="manual">
+      <h2 id="manual-title">简易用户手册</h2>
+      <ol>
+        <li><strong>首次配置：</strong>在“初始化”中选择仓库外的受保护目录，确认 App 的 <code>demo_ca.crt</code> 部署路径并设置强密码。完成后重建并发布 App。</li>
+        <li><strong>接收申请：</strong>网关用户本地生成 <code>gateway.key</code> 与 <code>gateway.csr</code>；只能把 CSR 交给管理员，绝不可上传或索要私钥。</li>
+        <li><strong>审核和签发：</strong>确认 CSR 的 DNS/IP SAN 属于申请的网关，再填写 CSR、CA 公钥、CA 私钥和输出路径。下载链接仅在本次管理端进程中有效。</li>
+        <li><strong>交付：</strong>只发送 <code>gateway.crt</code>。用户将它保存到 <code>VirtualGateway/certs/gateway.crt</code>，原私钥保留在其本机。</li>
+        <li><strong>根 CA 轮换：</strong>先新建 CA，并在阶段一部署“旧根 + 新根”信任包、发布 App、为网关续发新证书；确认所有网关已更新后，才执行阶段二移除旧根。</li>
+      </ol>
+      <p class="notice"><strong>切勿：</strong><span>将 <code>project-ca.key</code>、私钥密码或任何 <code>.key</code> 文件放进源码仓库、下载链接或交付包。</span></p>
+      <footer><button class="secondary" id="close-manual" type="button">关闭</button></footer>
+    </article>
+  </dialog>
+
+  <script>
+    const manual = document.querySelector("#manual-dialog");
+    document.querySelector("#open-manual").addEventListener("click", () => manual.showModal());
+    document.querySelector("#close-manual").addEventListener("click", () => manual.close());
+    manual.addEventListener("click", (event) => { if (event.target === manual) manual.close(); });
+
+    function formData(form) {
+      const data = Object.fromEntries(new FormData(form).entries());
+      for (const element of form.querySelectorAll('input[type="number"]')) data[element.name] = Number(data[element.name]);
+      for (const element of form.querySelectorAll('input[type="checkbox"]')) data[element.name] = element.checked;
+      return data;
+    }
+
+    function showResult(id, data, isError = false, downloadUrl = null) {
+      const container = document.querySelector(id);
+      container.replaceChildren();
+      container.className = "result show" + (isError ? " error" : "");
+      if (downloadUrl) {
+        const line = document.createElement("div");
+        line.className = "download-line";
+        const label = document.createElement("span");
+        label.textContent = "签发完成：";
+        const link = document.createElement("a");
+        link.className = "download";
+        link.href = downloadUrl;
+        link.textContent = "下载 gateway.crt";
+        line.append(label, link);
+        container.append(line);
+      }
+      const output = document.createElement("pre");
+      output.textContent = JSON.stringify(data, null, 2);
+      container.append(output);
+    }
+
+    function bindForm(formId, resultId, endpoint, afterSuccess) {
+      const form = document.querySelector(formId);
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        try {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(formData(form)),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || data.detail || "操作失败");
+          showResult(resultId, data, false, data.downloadUrl || null);
+          if (afterSuccess) afterSuccess(data);
+        } catch (error) {
+          showResult(resultId, { error: error.message || String(error) }, true);
+        } finally {
+          button.disabled = false;
+        }
+      });
+    }
+
+    bindForm("#initialize-form", "#initialize-result", "/api/v1/project-ca", (data) => {
+      const certificate = data.caCertificate || {};
+      document.querySelector("#sign-ca-cert").value = certificate.path || "";
+      document.querySelector("#sign-ca-key").value = (data.issuerRoot || "") + "\\project-ca.key";
+    });
+    bindForm("#sign-form", "#sign-result", "/api/v1/gateway-certificates");
+    bindForm("#transition-form", "#transition-result", "/api/v1/root-ca/transition");
+    bindForm("#finalize-form", "#finalize-result", "/api/v1/root-ca/finalize");
+  </script>
+</body>
+</html>
